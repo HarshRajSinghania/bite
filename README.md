@@ -39,6 +39,7 @@ Each one was reproduced with a standalone script in a clean environment before i
 | srptools | [#13](https://github.com/idlesign/srptools/issues/13) | 4 bugs. The maintainer fixed all 4 and closed it the same day. |
 | pyclibrary | [#92](https://github.com/MatthieuDartiailh/pyclibrary/issues/92) | 7 bugs. The maintainer offered to review a PR for each one. All 7 are reviewed and merged: [#93](https://github.com/MatthieuDartiailh/pyclibrary/pull/93), [#94](https://github.com/MatthieuDartiailh/pyclibrary/pull/94), [#95](https://github.com/MatthieuDartiailh/pyclibrary/pull/95), [#96](https://github.com/MatthieuDartiailh/pyclibrary/pull/96), [#97](https://github.com/MatthieuDartiailh/pyclibrary/pull/97), [#98](https://github.com/MatthieuDartiailh/pyclibrary/pull/98), [#99](https://github.com/MatthieuDartiailh/pyclibrary/pull/99). |
 | resolve-robotics-uri-py | [#26](https://github.com/gbionics/resolve-robotics-uri-py/issues/26) | URI lookup depended on the hash seed. The maintainers fixed it in [#27](https://github.com/gbionics/resolve-robotics-uri-py/pull/27) and thanked the reporter. |
+| django-tailwind-cli | [PR #232](https://github.com/django-commons/django-tailwind-cli/pull/232) | With one stylesheet, `tailwind watch` hid rebuild messages and build errors. Fix merged by the maintainer. |
 | mypy_boto3_builder | [#395](https://github.com/youtype/mypy_boto3_builder/issues/395) | Reported, waiting for a reply. |
 | drf-pydantic | [#51](https://github.com/georgebv/drf-pydantic/issues/51) | Reported, waiting for a reply. |
 | python-vcr-tests | [#18](https://github.com/keboola/python-vcr-tests/issues/18) | A Claude commit said its database recorder captures every query; only the last per cursor is saved. Fix sent as [#19](https://github.com/keboola/python-vcr-tests/pull/19), waiting for review. |
@@ -52,7 +53,7 @@ Each one was reproduced with a standalone script in a clean environment before i
 - **Proven fixes: 21 of 22 were real bugs**, according to both judges. Neither judge rated any fix as wrong. The judges agreed on 93% of claims.
 - **Weak spot:** each project had a bug its maintainers fixed soon after. Bite found only **1 of those 10**.
 
-These are small samples. The judges are AI models that read the code without running it. The only human checks so far are the maintainers' fixes and merges above: 4 bugs fixed in srptools, 7 PRs merged in pyclibrary, and the resolve-robotics-uri-py fix.
+These are small samples. The judges are AI models that read the code without running it. The only human checks so far are the maintainers' fixes and merges above: 4 bugs fixed in srptools, 7 PRs merged in pyclibrary, 1 in django-tailwind-cli, and the resolve-robotics-uri-py fix.
 
 ## Early access
 
