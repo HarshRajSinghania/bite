@@ -45,7 +45,7 @@ Each one was reproduced with a standalone script in a clean environment before i
 | python-vcr-tests | [#18](https://github.com/keboola/python-vcr-tests/issues/18) | A Claude commit said its database recorder captures every query; only the last per cursor is saved. Fix sent as [#19](https://github.com/keboola/python-vcr-tests/pull/19), waiting for review. |
 | marshmallow-fastoneofschema | [#1](https://github.com/Kalepa/marshmallow-fastoneofschema/issues/1) | 3 bugs. Fixes sent as [#2](https://github.com/Kalepa/marshmallow-fastoneofschema/pull/2), [#3](https://github.com/Kalepa/marshmallow-fastoneofschema/pull/3) and [#4](https://github.com/Kalepa/marshmallow-fastoneofschema/pull/4), waiting for review. |
 | treg | [PR #1237](https://github.com/superdesigndev/treg/pull/1237) | A Claude commit's test for an org header passes even with the fix removed, so it guards nothing. Sent a test that does, waiting for review. |
-| text-to-cad | [PR #708](https://github.com/earthtojake/text-to-cad/pull/708) | A Claude commit added a Python 3.11 syntax check that can't catch the exact bug it was written for (nested same-quote f-strings). Sent a test that does, waiting for review. |
+| text-to-cad | [PR #708](https://github.com/earthtojake/text-to-cad/pull/708) | A Claude commit added a Python 3.11 syntax check that can't catch the exact bug it was written for (nested same-quote f-strings). Sent a test that does. Merged by the maintainer, who then opened [#712](https://github.com/earthtojake/text-to-cad/pull/712) to close the remaining gaps. |
 
 ## Limitations (honest numbers)
 
@@ -55,7 +55,7 @@ Each one was reproduced with a standalone script in a clean environment before i
 - **Proven fixes: 21 of 22 were real bugs**, according to both judges. Neither judge rated any fix as wrong. The judges agreed on 93% of claims.
 - **Weak spot:** each project had a bug its maintainers fixed soon after. Bite found only **1 of those 10**.
 
-These are small samples. The judges are AI models that read the code without running it. The only human checks so far are the maintainers' fixes and merges above: 4 bugs fixed in srptools, 7 PRs merged in pyclibrary, 1 in django-tailwind-cli, and the resolve-robotics-uri-py fix.
+These are small samples. The judges are AI models that read the code without running it. The only human checks so far are the maintainers' fixes and merges above: 4 bugs fixed in srptools, 7 PRs merged in pyclibrary, 1 in django-tailwind-cli, 1 in text-to-cad, and the resolve-robotics-uri-py fix.
 
 ## Early access
 
