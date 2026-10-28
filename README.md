@@ -1,12 +1,12 @@
 # Bite
 
-**A proof of concept for an AI referee tool: it checks whether what a coding agent says is done is actually true.**
+**Bite checks whether an AI coding agent's "fixed" is actually true.**
 
-Bite turns an agent's "fixed" claim into a small test, runs the test itself, and shows a result only when a second, independent check agrees that the test is fair. It also hunts and fixes bugs in a throwaway copy of a project, and calls a fix "proven" only when a test fails without it and passes with it.
+When a commit says it fixed something, Bite writes one small test of that exact claim, runs it itself on the commit and on today's code, and shows the result only if a second, independent check agrees the test is fair. If the test fails, the "fixed" wasn't.
 
-The code isn't public yet. This page shows what it has found so far.
+The code isn't public yet. This page shows what it has found so far, with a link for every claim.
 
-## A real example: a fix that wasn't
+## The catch that shows what it's for
 
 In [fellowapp/prosemirror-py](https://github.com/fellowapp/prosemirror-py), commit `3614c96` (co-authored by Claude) says:
 
@@ -27,41 +27,45 @@ def test_cache_entry_removed_after_doc_gc():
     assert len(resolvedpos._resolve_cache) == 0   # fails: 1 == 0
 ```
 
-It fails on that commit and on today's code. The cache keeps each document alive through its cached positions, so the cleanup callback never runs. A standalone check on today's code found that after 20,000 documents are resolved and dropped, the cache still holds all 20,000, using 35 MB. Reported upstream with a repro ([prosemirror-py #335](https://github.com/fellowapp/prosemirror-py/issues/335)), and a tested fix is open as [#336](https://github.com/fellowapp/prosemirror-py/pull/336).
+It fails on that commit and on today's code. The cache keeps each document alive through its cached positions, so the cleanup never runs. After 20,000 documents are resolved and dropped, the cache still holds all 20,000, using 35 MB. The commit looked right, read right, and passed its own tests. Reported with a repro in [#335](https://github.com/fellowapp/prosemirror-py/issues/335); a tested fix is open as [#336](https://github.com/fellowapp/prosemirror-py/pull/336).
 
-## Bugs it found in real open-source projects
+## Fixed or merged upstream
 
-Each one was reproduced with a standalone script in a clean environment before it was reported.
+Each bug was reproduced with a standalone script in a clean environment before it was reported.
 
-| Project | Report | What happened |
+| Project | What happened |
+|---|---|
+| pyclibrary | 7 bugs reported in [#92](https://github.com/MatthieuDartiailh/pyclibrary/issues/92). All 7 fixes reviewed and merged: [#93](https://github.com/MatthieuDartiailh/pyclibrary/pull/93), [#94](https://github.com/MatthieuDartiailh/pyclibrary/pull/94), [#95](https://github.com/MatthieuDartiailh/pyclibrary/pull/95), [#96](https://github.com/MatthieuDartiailh/pyclibrary/pull/96), [#97](https://github.com/MatthieuDartiailh/pyclibrary/pull/97), [#98](https://github.com/MatthieuDartiailh/pyclibrary/pull/98), [#99](https://github.com/MatthieuDartiailh/pyclibrary/pull/99). The maintainer [wrote](https://github.com/MatthieuDartiailh/pyclibrary/issues/92): "Thanks for the small and focused PR very nice to review." |
+| django-tailwind-cli | With one stylesheet, `tailwind watch` hid rebuild messages and build errors. Fix [#232](https://github.com/django-commons/django-tailwind-cli/pull/232) merged and released in [4.8.2](https://github.com/django-commons/django-tailwind-cli/releases/tag/v4.8.2). The maintainer [wrote](https://github.com/django-commons/django-tailwind-cli/pull/232): "Just about to release 4.8.2 with the fix included. Thanks for the contribution." |
+| srptools | 4 bugs reported in [#13](https://github.com/idlesign/srptools/issues/13). The maintainer fixed all 4 and closed it the same day. |
+| resolve-robotics-uri-py | URI lookup depended on the hash seed ([#26](https://github.com/gbionics/resolve-robotics-uri-py/issues/26)). Fixed by the maintainers in [#27](https://github.com/gbionics/resolve-robotics-uri-py/pull/27). The maintainer [wrote](https://github.com/gbionics/resolve-robotics-uri-py/issues/26): "Thanks a lot for the detailed issue report!" |
+| text-to-cad | A Claude commit added a Python 3.11 syntax check that can't catch the exact bug it was written for (nested same-quote f-strings). Bite sent a test that does catch it, [#708](https://github.com/earthtojake/text-to-cad/pull/708), was merged; the maintainer then closed the remaining gaps in [#712](https://github.com/earthtojake/text-to-cad/pull/712). |
+
+## Sent, waiting for review
+
+| Project | Link | What happened |
 |---|---|---|
-| prosemirror-py | [#335](https://github.com/fellowapp/prosemirror-py/issues/335) | The memory leak above. Fix sent as [#336](https://github.com/fellowapp/prosemirror-py/pull/336), waiting for review. A second Claude commit (`1e3339e`) let `Mapping` change a list the caller still owned; fix sent as [#337](https://github.com/fellowapp/prosemirror-py/pull/337), waiting for review. |
-| srptools | [#13](https://github.com/idlesign/srptools/issues/13) | 4 bugs. The maintainer fixed all 4 and closed it the same day. |
-| pyclibrary | [#92](https://github.com/MatthieuDartiailh/pyclibrary/issues/92) | 7 bugs. The maintainer offered to review a PR for each one. All 7 are reviewed and merged: [#93](https://github.com/MatthieuDartiailh/pyclibrary/pull/93), [#94](https://github.com/MatthieuDartiailh/pyclibrary/pull/94), [#95](https://github.com/MatthieuDartiailh/pyclibrary/pull/95), [#96](https://github.com/MatthieuDartiailh/pyclibrary/pull/96), [#97](https://github.com/MatthieuDartiailh/pyclibrary/pull/97), [#98](https://github.com/MatthieuDartiailh/pyclibrary/pull/98), [#99](https://github.com/MatthieuDartiailh/pyclibrary/pull/99). The maintainer [wrote](https://github.com/MatthieuDartiailh/pyclibrary/issues/92): "Thanks for the small and focused PR very nice to review." |
-| resolve-robotics-uri-py | [#26](https://github.com/gbionics/resolve-robotics-uri-py/issues/26) | URI lookup depended on the hash seed. The maintainers fixed it in [#27](https://github.com/gbionics/resolve-robotics-uri-py/pull/27). The maintainer [wrote](https://github.com/gbionics/resolve-robotics-uri-py/issues/26): "Thanks a lot for the detailed issue report!" |
-| django-tailwind-cli | [PR #232](https://github.com/django-commons/django-tailwind-cli/pull/232) | With one stylesheet, `tailwind watch` hid rebuild messages and build errors. Fix merged by the maintainer and released in [4.8.2](https://github.com/django-commons/django-tailwind-cli/releases/tag/v4.8.2). The maintainer [wrote](https://github.com/django-commons/django-tailwind-cli/pull/232): "Just about to release 4.8.2 with the fix included. Thanks for the contribution." |
-| mypy_boto3_builder | [#395](https://github.com/youtype/mypy_boto3_builder/issues/395) | Reported, waiting for a reply. |
-| drf-pydantic | [#51](https://github.com/georgebv/drf-pydantic/issues/51) | Reported, waiting for a reply. |
-| python-vcr-tests | [#18](https://github.com/keboola/python-vcr-tests/issues/18) | A Claude commit said its database recorder captures every query; only the last per cursor is saved. Fix sent as [#19](https://github.com/keboola/python-vcr-tests/pull/19), waiting for review. |
-| marshmallow-fastoneofschema | [#1](https://github.com/Kalepa/marshmallow-fastoneofschema/issues/1) | 3 bugs. Fixes sent as [#2](https://github.com/Kalepa/marshmallow-fastoneofschema/pull/2), [#3](https://github.com/Kalepa/marshmallow-fastoneofschema/pull/3) and [#4](https://github.com/Kalepa/marshmallow-fastoneofschema/pull/4), waiting for review. |
-| treg | [PR #1237](https://github.com/superdesigndev/treg/pull/1237) | A Claude commit's test for an org header passes even with the fix removed, so it guards nothing. Sent a test that does, waiting for review. |
-| text-to-cad | [PR #708](https://github.com/earthtojake/text-to-cad/pull/708) | A Claude commit added a Python 3.11 syntax check that can't catch the exact bug it was written for (nested same-quote f-strings). Sent a test that does. Merged by the maintainer, who then closed the remaining gaps in [#712](https://github.com/earthtojake/text-to-cad/pull/712), also merged. |
-| llm | [PR #1828](https://github.com/simonw/llm/pull/1828) | A Claude commit fixed per-turn tool ids in `llm logs`, but its test never made a tool call, so it passed even with the bug. Sent a test that fails on the old code, waiting for review. |
-| claude-seo | [PR #392](https://github.com/AgriciDaniel/claude-seo/pull/392) | A Claude commit's `--release` check let a value with a trailing newline through. Fix sent, waiting for review. |
-| mizani | [PR #90](https://github.com/has2k1/mizani/pull/90) | Number labels picked too few decimals when values were close together (`[0, 10, 10.5]` showed as `10, 10`). Fix sent, waiting for review. |
-| django-modeltranslation | [PR #831](https://github.com/deschler/django-modeltranslation/pull/831) | Nested `auto_populate()` and `fallbacks()` blocks reset the setting to nothing on exit instead of restoring it. Fix sent, waiting for review. |
-| west | [PR #1013](https://github.com/zephyrproject-rtos/west/pull/1013) | Loading a manifest from data with a reserved project name crashed. Fix sent, waiting for review. |
-| midea-lan | [PR #251](https://github.com/wuwentao/midea-lan/pull/251) | A message encoder got the frame length wrong when no padding was needed. Fix sent, waiting for review. |
+| prosemirror-py | [#335](https://github.com/fellowapp/prosemirror-py/issues/335), [#336](https://github.com/fellowapp/prosemirror-py/pull/336), [#337](https://github.com/fellowapp/prosemirror-py/pull/337) | The leak above. A second Claude commit (`1e3339e`) let `Mapping` change a list the caller still owned; fix in #337. |
+| python-vcr-tests | [#18](https://github.com/keboola/python-vcr-tests/issues/18), [#19](https://github.com/keboola/python-vcr-tests/pull/19) | A Claude commit said its database recorder captures every query; only the last per cursor is saved. |
+| ChatSBOM | [#217](https://github.com/WangYihang/ChatSBOM/issues/217) | A Claude commit's stale-result guard is reset on every walk page, so a repo can be collected twice. |
+| llm | [#1828](https://github.com/simonw/llm/pull/1828) | A Claude commit fixed per-turn tool ids in `llm logs`, but its test never made a tool call, so it passed even with the bug. |
+| treg | [#1237](https://github.com/superdesigndev/treg/pull/1237) | A Claude commit's test for an org header passes even with the fix removed, so it guards nothing. |
+| claude-seo | [#392](https://github.com/AgriciDaniel/claude-seo/pull/392) | A Claude commit's `--release` check let a value with a trailing newline through. |
+| marshmallow-fastoneofschema | [#1](https://github.com/Kalepa/marshmallow-fastoneofschema/issues/1), [#2](https://github.com/Kalepa/marshmallow-fastoneofschema/pull/2), [#3](https://github.com/Kalepa/marshmallow-fastoneofschema/pull/3), [#4](https://github.com/Kalepa/marshmallow-fastoneofschema/pull/4) | 3 bugs, one fix each. |
+| mizani | [#90](https://github.com/has2k1/mizani/pull/90) | Number labels picked too few decimals when values were close together (`[0, 10, 10.5]` showed as `10, 10`). |
+| django-modeltranslation | [#831](https://github.com/deschler/django-modeltranslation/pull/831) | Nested `auto_populate()` and `fallbacks()` blocks reset the setting to nothing on exit instead of restoring it. |
+| west | [#1013](https://github.com/zephyrproject-rtos/west/pull/1013) | Loading a manifest from data with a reserved project name crashed. |
+| midea-lan | [#251](https://github.com/wuwentao/midea-lan/pull/251) | A message encoder got the frame length wrong when no padding was needed. |
+| mypy_boto3_builder | [#395](https://github.com/youtype/mypy_boto3_builder/issues/395) | Reported, no reply yet. |
+| drf-pydantic | [#51](https://github.com/georgebv/drf-pydantic/issues/51) | Reported, no reply yet. |
 
-## Limitations (honest numbers)
+## Limits, plainly
 
-**Checking "fixed" claims.** Bite tested 76 claims from Claude-made commits in 9 open-source projects, all picked by a fixed rule. It showed 3 false "done" claims, and all 3 were real. One is the leak above. The other two were minor, and the projects' own next commits fixed exactly those bugs. 7 of the 9 projects had none: on well-reviewed code, the agents' claims mostly held. The second check threw out 10 failing tests that weren't fair. Later rounds checked about 70 more claims and found 3 more false "done": the python-vcr-tests recorder above and 2 minor ones.
-
-**Hunting bugs overnight.** 10 projects, one night each, with two AI judges reading the claims blind:
-- **Proven fixes: 21 of 22 were real bugs**, according to both judges. Neither judge rated any fix as wrong. The judges agreed on 93% of claims.
-- **Weak spot:** each project had a bug its maintainers fixed soon after. Bite found only **1 of those 10**.
-
-These are small samples. The judges are AI models that read the code without running it. The only human checks so far are the maintainers' fixes and merges above: 4 bugs fixed in srptools, 7 PRs merged in pyclibrary, 1 in django-tailwind-cli, 1 in text-to-cad (plus the maintainer's own follow-up), and the resolve-robotics-uri-py fix.
+- **Most claims hold.** Across all rounds so far, Bite tested 137 "fixed" claims from Claude-made commits that it could run tests for. 8 were false (about 1 in 17), and 4 of those were still broken on today's code. On well-reviewed projects it usually finds nothing, and that's the right answer.
+- **Quiet is not a pass.** Bite only shows a failing test that the second check calls fair and real. That second check has thrown out more than 10 failing tests that weren't. A claim that holds proves that one claim, not that the commit has no other bugs.
+- **It needs the project's tests to run.** If they don't run on a clean copy, Bite can't check that commit.
+- **Bug hunting is weaker than claim checking.** In a 10-project overnight hunt, two blind AI judges rated 21 of 22 proven fixes as real bugs and none as wrong, but Bite found only 1 of the 10 bugs the maintainers fixed soon after.
+- **Small samples, AI judges.** The judges read code without running it. The human checks are the maintainers' fixes and merges listed above.
 
 ## Early access
 
