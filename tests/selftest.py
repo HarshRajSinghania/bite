@@ -14,13 +14,15 @@ sys.path.insert(0, str(KIT))
 import recent  # noqa: E402
 
 PY = sys.executable
+print("Bite self-test: about 50 checks on small practice repos, 15 s to 2 min. Each \"ok\" line is one check.",
+      flush=True)
 CLAUDE = "\n\nCo-Authored-By: Claude <noreply@anthropic.com>"
 OK = []
 
 
 def check(name, cond):
     OK.append(bool(cond))
-    print(("ok   " if cond else "FAIL ") + name)
+    print(("ok   " if cond else "FAIL ") + name, flush=True)
 
 
 def sh(root, *a):
