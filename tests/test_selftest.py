@@ -1,4 +1,5 @@
-"""Runs Bite's offline self-test (tests/selftest.py) under pytest. No key, no network."""
+"""Runs Bite's offline self-test (tests/selftest.py) under pytest. No key, no network.
+Its "ok"/"FAIL" lines print as they run (pytest's -s is on in pyproject.toml), so a slow PC doesn't look frozen."""
 
 import subprocess
 import sys
@@ -6,7 +7,5 @@ from pathlib import Path
 
 
 def test_selftest():
-    r = subprocess.run([sys.executable, str(Path(__file__).with_name("selftest.py"))],
-                       capture_output=True, text=True)
-    fails = [line for line in r.stdout.splitlines() if line.startswith("FAIL")]
-    assert r.returncode == 0, "\n".join(fails) or r.stdout[-2000:] + r.stderr[-2000:]
+    r = subprocess.run([sys.executable, str(Path(__file__).with_name("selftest.py"))])
+    assert r.returncode == 0, "a self-test check failed: see the FAIL lines above"

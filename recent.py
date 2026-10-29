@@ -235,6 +235,8 @@ def undo_check(root: Path, c: dict, cfg) -> str:
     try:
         now = bite.run_tests(fcfg, folder)
         if not now["ok"]:
+            errs = [ln.strip(" E>") for ln in now["out"].splitlines() if re.search(r"\b\w+(?:Error|Exception)\b:", ln)]
+            c["why"] = (errs[-1] if errs else now["why"])[:160]
             return "tests fail at this commit"
         if ran_nothing(bite.tests_cmd(fcfg), now["out"]):
             return "no tests ran at this commit"
@@ -623,6 +625,8 @@ def main(argv=None):
         elif c["undo"] == "TEST GUARDS NOTHING":
             c["score"] += 3
         print(f"  {c['sha'][:8]} {c['undo']:<26} {c['subject'][:70]}", flush=True)
+        if c.get("why"):  # say what broke, so it's clear whether it's the project or the copy
+            print(f"           why: {c['why']}", flush=True)
         save_log(root, kept, cs)
     cs.sort(key=lambda c: -c["score"])
     found, tried = [], []

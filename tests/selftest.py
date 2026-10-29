@@ -254,6 +254,13 @@ rc, out = run(root, [], fake_worker())
 check("free_test_command: the free pass runs it", "tests fail at this commit" in out)
 check("free_test_command: the claim test still runs with the full command", 'FALSE "DONE"' in out)
 
+# When the tests fail on Bite's copy, it says what broke (e.g. a file the project makes only at install time).
+root = make_repo()
+(root / ".bite.ini").write_text(f"[kit]\ntest_command = {PY} -m unittest -q\nallowed_programs = {PY}\n"
+                                f"free_test_command = {PY} -c \"import pkg.version\"\n")
+rc, out = run(root, ["--free"], fake_worker())
+check("tests that fail on the copy: Bite prints why", "why: ModuleNotFoundError: No module named 'pkg'" in out)
+
 # .NET: Bite finds the test command, and runs one claim test by class name (dotnet test takes no file path).
 import bite  # noqa: E402
 net = Path(tempfile.mkdtemp())
@@ -313,6 +320,7 @@ oid = hashlib.sha256(real).hexdigest()
 ptr = f"version https://git-lfs.github.com/spec/v1\noid sha256:{oid}\nsize {len(real)}\n".encode()
 (root / "art.png").write_bytes(ptr)
 (root / "gone.png").write_bytes(ptr.replace(oid.encode(), b"0" * 64))
+(root / ".gitattributes").write_text("*.png -text\n")  # as in LFS repos: no line-ending changes (Windows autocrlf)
 commit(root, "add art")
 store = root / ".git" / "lfs" / "objects" / oid[:2] / oid[2:4]
 store.mkdir(parents=True)
