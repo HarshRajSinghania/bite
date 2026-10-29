@@ -62,7 +62,8 @@ DEFAULT_FAIL = r"\bFAIL|SCRIPT ERROR|SHADER ERROR|Parse Error|parse error|ignori
 class Config:
     def __init__(self, path: Path = CONFIG_FILE):
         if not path.exists():
-            raise SystemExit(f"No {path.name} found. Run python bite.py --setup first.")
+            raise SystemExit(f"No {path.name} found. Settings are optional: run bite in your repo "
+                             "to guess the test command, or create .bite.ini there with a [kit] section.")
         cp = configparser.ConfigParser(interpolation=None)
         cp.read(path, encoding="utf-8")
         g = cp["kit"] if "kit" in cp else {}
@@ -765,7 +766,7 @@ def load_key() -> str:
         return os.environ["ANTHROPIC_API_KEY"]
     if KEY_FILE.exists():
         return clean_key(KEY_FILE.read_text(encoding="utf-8-sig"))
-    raise SystemExit("No API key. Run python bite.py --setup again, or put your key in key.txt next to bite.py.")
+    raise SystemExit("No API key. Set ANTHROPIC_API_KEY, or put your key in key.txt next to bite.py.")
 
 
 def guess_test_command(folder: Path) -> str:
