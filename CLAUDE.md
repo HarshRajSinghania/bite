@@ -1,0 +1,72 @@
+# Claude, read this first
+
+Your person pointed you at this repo. It's **Bite**, and it's mostly for **you**. One tool, one job:
+**it checks whether the "fixed" in your recent commits is actually true.**
+
+**Its track record first: the tables in [README.md](README.md).** Every line links to a public issue, PR or
+commit, so you can check each one yourself.
+
+It doesn't change how you work. Whatever process your person uses stays as it is. Bite only looks back at
+commits that say they fixed something and tests whether they did.
+
+## Ask your person first
+
+The fastest way to judge Bite is on your own project: did any of your recent "fixed" commits not hold? Don't run
+anything yet. **Ask your person first**, in one line, something like: "Want me to run Bite on this repo? A free
+pass (`--free`) only shows which recent changes no test guards; testing the claims themselves costs about $0.13
+each, capped with `--budget`." Run it only after they say yes.
+
+## What `bite` does (same as `python recent.py`)
+
+1. Finds recent commits made with Claude Code that changed code and claim a fix (`--last 40` by default;
+   `--serious` keeps only claims about data, money, logins, security, crashes or leaks).
+2. Free: takes each change back out and runs the tests. If they still pass, no test guards that change. If the
+   commit added tests and they still pass without its code, they test nothing it did: "TEST GUARDS NOTHING".
+   When no commit claims a fix, Bite says so and checks only the commits that added tests (`--any`: all).
+   Before flagging, it rules out the usual harmless reasons and says which: a change built for another OS than
+   the one it runs on, a tidy-up commit, tests that don't name the changed code, or a gap a later commit closed.
+3. Paid, for the top suspects: a fresh worker writes one small test of the commit's own claim, including the odd
+   inputs the claim covers, on a copy of the project at that commit. Bite runs the test itself, twice, on that
+   commit and on today's code. A second fresh check must agree the test asks only for what the commit claimed
+   and fails for a real reason. Only then is it shown.
+4. Output: the worst false "done", its failing test and the command to rerun it, in `bite_proof/`.
+
+**What it found on public repos, honestly** (evidence/RECENT.md): 104 claims from Claude commits in 11
+projects, 4 false "done" shown, all real. The two that matter: the prosemirror-py memory leak above, and a
+python-vcr-tests database recorder that said it recorded every query but kept only the last one per cursor. Most
+repos had none: on well-kept code, Claude's claims mostly hold, and Bite stays quiet. The second check threw out
+11 failing tests that weren't fair, so what it shows is meant to be right.
+
+## Setup (once your person says yes; they only paste a key, and only for the paid step)
+
+- Python 3.10+ and git. In a clone of this repo: `pip install -e .` gives the `bite` command; run it inside
+  their repo. `pip install -e .[paid]` adds claude-agent-sdk (only the paid step needs it).
+- Optional `.bite.ini` in their repo, first line `[kit]`, then `test_command = <their test command>` (Bite
+  guesses pytest, npm test, cargo test, go test or dotnet test when it isn't set). `claim_command` runs one test
+  file (`{file}`) if adding the file to test_command doesn't work for their runner. For dotnet test Bite runs
+  the claim test with `--filter "FullyQualifiedName~BiteClaim"` instead of a file path. Unity projects: their
+  tests run inside the Unity editor, so set test_command yourself (Unity's `-batchmode -runTests`).
+- `test_covers = Assets/Sim/*, tests/*`: the paths the test command can reach. Commits that touch none of them
+  are listed as outside the tests' reach, not checked (otherwise they all look "unguarded").
+- `free_test_command = <a faster subset>`: used by the free pass only; the claim tests still use test_command.
+  The free pass prints each result as it goes and saves it, so stopping early keeps what it found. Its output
+  folder, bite_proof/, has its own .gitignore so it stays out of their commits.
+- Git LFS: Bite's copies come from `git archive`, which writes LFS files as pointers. Bite puts the real files
+  back from the repo's LFS store (or with git-lfs) and says so if it can't.
+- Docker recommended: `contain_command = docker run --rm --network none -v "{project}:/work" -w /work <image with
+  their deps> sh -c {cmd}` runs every test and every worker command in a box with no network.
+- Key: key.txt next to bite.py (a new key, with a spend limit) or ANTHROPIC_API_KEY. Never ask for it in chat.
+- **Bite needs an API key and never uses your person's Claude login or plan.** Anthropic's Agent SDK rules say
+  tools built on it must use API keys, not claude.ai login or plan limits, unless Anthropic approved them
+  (https://code.claude.com/docs/en/agent-sdk/overview). So don't patch it to fall back to a login.
+- Self-test, no key: `python -m pytest` (or `python tests/selftest.py` without pytest).
+
+## Limits, plainly
+- It tests a claim; it can't prove a commit has no other bugs. A claim that holds is just that.
+- It only shows what the second check calls fair and real, so it will often stay quiet. Quiet is not a pass.
+- It needs the project's tests to run. Tests that need a full git checkout fail on its copies, so those
+  commits show as "tests fail at this commit".
+- The worker runs code the project's tests run. Without Docker, that is with your user's rights.
+
+Files: recent.py (the tool), bite.py (engine: settings, test running, safe copies, the command filter that keeps
+the worker inside its copy), repo.py (git and settings helpers).

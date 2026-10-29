@@ -4,7 +4,23 @@
 
 When a commit says it fixed something, Bite writes one small test of that exact claim, runs it itself on the commit and on today's code, and shows the result only if a second, independent check agrees the test is fair. If the test fails, the "fixed" wasn't.
 
-The code isn't public yet. This page shows what it has found so far, with a link for every claim.
+## Try it in a minute
+
+```
+git clone https://github.com/connabyss/bite && cd bite
+pip install -e .
+cd /path/to/your-repo && bite --free
+```
+
+`bite --free` needs no key and costs nothing. It takes each recent change back out, runs your tests, and lists
+the changes no test guards, plus any new test that still passes without its commit's code (it tests nothing).
+
+To test the claims themselves, `pip install -e .[paid]` and set `ANTHROPIC_API_KEY`, then run `bite`. Each claim
+costs about $0.13, and `--budget` caps the total ($1 by default). Bite needs an API key for this step and
+never uses a Claude login or plan (Anthropic's Agent SDK rule: https://code.claude.com/docs/en/agent-sdk/overview).
+
+Works with pytest, npm test, cargo test, go test and dotnet test. Settings and limits: [CLAUDE.md](CLAUDE.md),
+written so your own Claude can set Bite up for you. Bite's own tests: `pip install -e .[test]` then `python -m pytest`.
 
 ## The catch that shows what it's for
 
@@ -67,6 +83,9 @@ Each bug was reproduced with a standalone script in a clean environment before i
 - **Bug hunting is weaker than claim checking.** In a 10-project overnight hunt, two blind AI judges rated 21 of 22 proven fixes as real bugs and none as wrong, but Bite found only 1 of the 10 bugs the maintainers fixed soon after.
 - **Small samples, AI judges.** The judges read code without running it. The human checks are the maintainers' fixes and merges listed above.
 
-## Early access
+## Contributing
 
-Want to try Bite on your own project? [Open an issue](../../issues/new) and say a little about the project.
+Bug reports, fixes and AI-assisted PRs are all welcome. See [CONTRIBUTING.md](CONTRIBUTING.md). If Bite flagged
+something wrongly, or missed a claim you know was false, please [open an issue](../../issues/new/choose).
+
+MIT licensed.

@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bite-check"
+version = "0.1.0"
+description = "Checks whether the \"fixed\" in your coding agent's recent commits is actually true."
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+paid = ["claude-agent-sdk"]
+test = ["pytest"]
+
+[project.scripts]
+bite = "recent:main"
+
+[project.urls]
+Homepage = "https://github.com/connabyss/bite"
+
+[tool.setuptools]
+py-modules = ["bite", "recent", "repo"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
