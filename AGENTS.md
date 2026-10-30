@@ -27,7 +27,7 @@ Anthropic API key, and `--budget` caps what a run spends ($1 by default)." Run i
 ## Quick start (after your person says yes)
 
 ```
-pipx install git+https://github.com/connabyss/bite
+pipx install bite-check
 cd <their repo>
 bite --free
 ```
@@ -37,7 +37,7 @@ bite --free
 - The project's own test runner (e.g. pytest) must be installed in the environment its tests run in, or Bite
   stops and prints the install line.
 - Every run ends with a one-page report, `bite_proof/report.html`, to open in a browser.
-- Upgrade: `pipx install --force git+https://github.com/connabyss/bite`.
+- Upgrade: `pipx upgrade bite-check`.
 
 ## What `bite` does (same as `python recent.py`)
 
@@ -65,7 +65,7 @@ repos had none: on well-kept code, AI fix claims mostly hold, and Bite stays qui
 
 ## Setup (once your person says yes; they only paste a key, and only for the paid step)
 
-- Python 3.10+ and git. `pipx install git+https://github.com/connabyss/bite` gives the `bite` command (no venv
+- Python 3.10+ and git. `pipx install bite-check` gives the `bite` command (no venv
   to activate); run it inside their repo. `pipx inject bite-check claude-agent-sdk` adds the paid step's
   package. If they have no pipx: `python -m pip install --user pipx`, `python -m pipx ensurepath`, new window.
   Bite checks for git and the test runner (e.g. pytest) first and prints the install line if one is missing.
