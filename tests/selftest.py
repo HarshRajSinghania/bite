@@ -391,6 +391,10 @@ rc, out = run(root, ["--free"], fake_worker())
 page = (root / "bite_proof" / "report.html").read_text(encoding="utf-8") if rc == 0 else ""
 check("report: report.html is written and named at the end of a run", "report.html" in out and "<table>" in page)
 check("report: a commit nobody's test guards is shown as such", "No test notices if this change is taken out" in page)
+note = (root / "bite_proof" / "COMMENT.md").read_text(encoding="utf-8") if rc == 0 else ""
+check("comment: the pull request comment leads with a plain verdict and what to do",
+      note.startswith("<!-- bite-check -->\n### ⚠️ Bite: 2 changes worth a look") and "**What to do:**" in note
+      and "<details>" in note and "Fix &lt;b&gt;neg" in note)
 check("report: commit subjects are escaped, not run as HTML", "Fix &lt;b&gt;neg&lt;/b&gt; &amp; friends" in page)
 
 # Docs: the key rule is stated where a reader looks first.

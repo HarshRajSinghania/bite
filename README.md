@@ -49,6 +49,9 @@ can be taken back out and your tests still pass. No key, no cost.
 ```yaml
 name: bite
 on: pull_request
+permissions:
+  contents: read
+  pull-requests: write
 jobs:
   bite:
     runs-on: ubuntu-latest
@@ -64,8 +67,10 @@ jobs:
 ```
 
 Options go under `with:`: `args` (extra `bite` options, default `--all`, which checks every commit, not only
-ones made with Claude Code), `max-commits` (default 20) and `fail-on-gap` (set to `false` to report without
-failing). What it found is in the job's summary page.
+ones made with Claude Code), `max-commits` (default 20), `fail-on-gap` (set to `false` to report without
+failing) and `comment` (set to `false` for no comment). It posts one comment on the pull request that says, per
+commit, whether a test noticed the change being taken out, and updates that same comment on later pushes. The
+rerun steps for each flagged commit are on the job's summary page.
 
 ## The catch that shows what it's for
 

@@ -14,6 +14,12 @@ inputs:
   fail-on-gap:
     description: Fail the check when a commit's change is not guarded by any test.
     default: "true"
+  comment:
+    description: Post one comment on the pull request with the result per commit, and update it on later pushes.
+    default: "true"
+  github-token:
+    description: Token for the comment (needs pull-requests write permission).
+    default: ${{ github.token }}
 
 runs:
   using: composite
@@ -28,7 +34,26 @@ runs:
         MAX: ${{ inputs.max-commits }}
         ARGS: ${{ inputs.args }}
         FAIL: ${{ inputs.fail-on-gap }}
+        COMMENT: ${{ inputs.comment }}
+        GH_TOKEN: ${{ inputs.github-token }}
+        PR: ${{ github.event.pull_request.number }}
       run: |
+        post_comment() {
+          [ "$COMMENT" = "true" ] || return 0
+          body=bite_proof/COMMENT.md
+          if [ ! -f "$body" ]; then
+            mkdir -p bite_proof
+            printf '<!-- bite-check -->\n### ➖ Bite: nothing here it could check\n\n%s\n' \
+              "No commit in this pull request changed code that Bite can test." > "$body"
+          fi
+          id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+            --jq '.[] | select(.body | startswith("<!-- bite-check -->")) | .id' | head -n 1) &&
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@"$body" > /dev/null
+          else
+            gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -F body=@"$body" > /dev/null
+          fi || echo "::warning::Bite couldn't post its comment (it needs pull-requests: write; pull requests from forks get a read-only token)."
+        }
         if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
           echo "Bite needs the full history: set fetch-depth: 0 on actions/checkout."
           exit 1
@@ -40,11 +65,17 @@ runs:
         n=$(git rev-list --count --no-merges "$BASE..HEAD")
         [ "$n" -gt "$MAX" ] && n=$MAX
         echo "This pull request has $n commit(s) to check."
+        rm -f bite_proof/FREE_REPORT.md bite_proof/COMMENT.md
         if [ "$n" -eq 0 ]; then
+          post_comment
           exit 0
         fi
-        rm -f bite_proof/FREE_REPORT.md
-        bite --free --last "$n" --free-checks "$n" $ARGS
+        rc=0
+        bite --free --last "$n" --free-checks "$n" $ARGS || rc=$?
+        if [ "$rc" -ne 0 ]; then
+          exit "$rc"
+        fi
+        post_comment
         if [ -f bite_proof/FREE_REPORT.md ]; then
           cat bite_proof/FREE_REPORT.md >> "$GITHUB_STEP_SUMMARY"
           if [ "$FAIL" = "true" ]; then
