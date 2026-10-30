@@ -431,7 +431,7 @@ check("report: report.html is written and named at the end of a run", "report.ht
 check("report: a commit nobody's test guards is shown as such", "No test noticed it was gone" in page)
 note = (root / "bite_proof" / "COMMENT.md").read_text(encoding="utf-8") if rc == 0 else ""
 check("comment: the pull request comment leads with a plain verdict and what to do",
-      note.startswith("<!-- bite-check -->\n### ⚠️ Bite: no test noticed 3 changes") and "**Next:**" in note
+      note.startswith(f"<!-- bite-check -->\n### {recent.CAT} ⚠️ Bite: no test noticed 3 changes") and "**Next:**" in note
       and "<details>" in note and "“Fix &lt;b&gt;neg" in note and "<sub>Commit `" in note)
 check("report: commit subjects are escaped, not run as HTML", "Fix &lt;b&gt;neg&lt;/b&gt; &amp; friends" in page)
 
@@ -446,13 +446,13 @@ c2 = {"sha": "b" * 40, "subject": "two"}
 newest_fails = recent.write_comment(root, [dict(c1, undo="tests fail at this commit", why="NameError: x"),
                                            dict(c2, undo="guarded")], newest=c1["sha"]).read_text(encoding="utf-8")
 check("comment: tests failing on the newest commit lead with a red verdict and say fix them first",
-      "### ❌ Bite: your tests already fail" in newest_fails and "fix them first" in newest_fails and "NameError: x" in newest_fails)
+      f"### {recent.CAT} ❌ Bite: your tests already fail" in newest_fails and "fix them first" in newest_fails and "NameError: x" in newest_fails)
 older_fails = recent.write_comment(root, [dict(c1, undo="tests fail at this commit"), dict(c2, undo="guarded")],
                                    newest=c2["sha"]).read_text(encoding="utf-8")
 check("comment: tests that failed only on an older commit don't decide the verdict",
-      "### ✅" in older_fails and "Bite skipped it" in older_fails and "❌" not in older_fails)
+      f"### {recent.CAT} ✅" in older_fails and "Bite skipped it" in older_fails and "❌" not in older_fails)
 notes["no tests ran"] = recent.write_comment(root, [dict(c1, undo="no tests ran at this commit")], newest=c1["sha"]).read_text(encoding="utf-8")
-check("comment: no tests ran is a warning, not a calm dash", "### ⚠️ Bite: no tests found" in notes["no tests ran"])
+check("comment: no tests ran is a warning, not a calm dash", f"### {recent.CAT} ⚠️ Bite: no tests found" in notes["no tests ran"])
 notes["tests fail"] = newest_fails
 check("comment: a commit set aside on purpose says skipped, not couldn't check",
       "Skipped: a tidy-up" in recent.write_comment(root, [dict(c1, undo="not flagged: a tidy-up (no behaviour change meant)")]).read_text(encoding="utf-8"))
@@ -464,7 +464,7 @@ broken = make_repo()
 rc, out = run(broken, ["--free"], fake_worker())
 notes["couldn't run"] = (broken / "bite_proof" / "COMMENT.md").read_text(encoding="utf-8") if (broken / "bite_proof" / "COMMENT.md").is_file() else ""
 check("comment: when Bite can't run, the comment says why instead of leaving the last one up",
-      rc == 1 and "### ❌ Bite couldn't start" in notes["couldn't run"] and "no_such_runner_bite" in notes["couldn't run"])
+      rc == 1 and f"### {recent.CAT} ❌ Bite couldn't start" in notes["couldn't run"] and "no_such_runner_bite" in notes["couldn't run"])
 plain_root = make_repo()
 (plain_root / "calc.py").write_text((plain_root / "calc.py").read_text() + "\n\ndef cube(x):\n    return x ** 3\n")
 commit(plain_root, "Add cube" + CLAUDE)
@@ -488,8 +488,11 @@ check("caught_by: reads failing test names from pytest, unittest, go and cargo o
 rc, out = run(root, ["--free", "--last", "0"], fake_worker())
 notes["nothing in the pull request"] = (root / "bite_proof" / "COMMENT.md").read_text(encoding="utf-8") if rc == 0 else ""
 how = "Bite asks one question about each change: if it disappeared, would any test notice? It takes the change out, runs your tests, and puts it back."
+check("comment: every kind starts with the same cat logo, the picture in assets/", len(notes) >= 7
+      and all(n.split("\n")[1].startswith(f"### {recent.CAT} ") for n in notes.values())
+      and (KIT / "assets" / "bite-avatar.png").is_file())
 check("comment: every kind (worth a look, tests check it, couldn't check, no code) ends with the same words and link",
-      all(n.startswith("<!-- bite-check -->\n### ") and how in n
+      all(n.startswith(f"<!-- bite-check -->\n### {recent.CAT} ") and how in n
           and n.endswith("[What is Bite?](https://github.com/connabyss/bite)\n\n</details>\n") for n in notes.values()))
 check("comment: a run with nothing to check still writes the comment the GitHub Action posts",
       "No commit in this pull request changed code" in notes["nothing in the pull request"])

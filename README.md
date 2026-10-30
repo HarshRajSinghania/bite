@@ -1,4 +1,9 @@
-# Bite
+<p>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/bite-header-dark.png">
+    <img alt="Bite" src="assets/bite-header-light.png" width="300">
+  </picture>
+</p>
 
 [![GitHub Marketplace](https://img.shields.io/badge/Marketplace-Bite%20free%20check-blue?logo=github)](https://github.com/marketplace/actions/bite-free-check)
 
