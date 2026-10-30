@@ -1,7 +1,7 @@
 <p>
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/bite-header-dark.png">
-    <img alt="Bite" src="assets/bite-header-light.png" width="300">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/connabyss/bite/main/assets/bite-header-dark.png">
+    <img alt="Bite" src="https://raw.githubusercontent.com/connabyss/bite/main/assets/bite-header-light.png" width="300">
   </picture>
 </p>
 
@@ -29,7 +29,7 @@ python -m pipx ensurepath
 Close the terminal window and open a new one, then:
 
 ```
-pipx install git+https://github.com/connabyss/bite
+pipx install bite-check
 cd /path/to/your-repo
 bite --free
 ```
@@ -37,7 +37,7 @@ bite --free
 `bite` now works in any terminal window. `bite --free` needs no key and costs nothing. It takes each recent
 change back out, runs your tests, and lists the changes no test guards, plus any new test that still passes
 without its commit's code (it tests nothing). If something it needs is missing, like git or pytest, it says
-so and gives you the line that installs it. Each run ends with a one-page report, `bite_proof/report.html`, to open in your browser. To update Bite later, run the install line again with `--force`: `pipx install --force git+https://github.com/connabyss/bite`.
+so and gives you the line that installs it. Each run ends with a one-page report, `bite_proof/report.html`, to open in your browser. To update Bite later: `pipx upgrade bite-check`.
 
 To test the claims themselves (the paid step), add one extra package and set `ANTHROPIC_API_KEY`, then run `bite`:
 
@@ -49,7 +49,7 @@ This step uses your own API key, and `--budget` caps what a run spends ($1 by de
 Agent SDK, so it needs an API key and never uses a Claude login or plan (Anthropic's Agent SDK rule:
 https://code.claude.com/docs/en/agent-sdk/overview). The commits Bite checks can come from any coding AI or person.
 
-Works with pytest, npm test, cargo test, go test and dotnet test. Settings and limits: [AGENTS.md](AGENTS.md),
+Works with pytest, npm test, cargo test, go test and dotnet test. Settings and limits: [AGENTS.md](https://github.com/connabyss/bite/blob/main/AGENTS.md),
 written so your coding AI (Claude Code, Codex, Cursor, Copilot) can set Bite up for you. To work on Bite itself: clone it, `pip install -e .[test]`, then `python -m pytest`.
 
 ## Run it on every pull request
@@ -157,8 +157,8 @@ Each bug was reproduced with a standalone script in a clean environment before i
 
 ## Contributing
 
-Bug reports, fixes and AI-assisted PRs are all welcome. See [CONTRIBUTING.md](CONTRIBUTING.md). If Bite flagged
-something wrongly, or missed a claim you know was false, please [open an issue](../../issues/new/choose).
+Bug reports, fixes and AI-assisted PRs are all welcome. See [CONTRIBUTING.md](https://github.com/connabyss/bite/blob/main/CONTRIBUTING.md). If Bite flagged
+something wrongly, or missed a claim you know was false, please [open an issue](https://github.com/connabyss/bite/issues/new/choose).
 
 Thank you to Bite's first contributors:
 
