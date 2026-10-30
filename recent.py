@@ -1,13 +1,13 @@
 """
-Bite recent: did your coding agent's recent "done" commits really do what they said?
+Bite: did your coding agent's recent "done" commits really do what they said?
 
-    python recent.py                 check the last 40 commits made with Claude Code (needs a key for step 2)
-    python recent.py --free          step 1 only: no key, no cost
-    python recent.py --all           every commit, not only Claude-made ones
-    python recent.py --last 80 --suspects 3 --budget 1.00
-    python recent.py --serious       only fix claims about data, money, logins, security, crashes or leaks
-    python recent.py --any           check commits even when none of them claims a fix
-    (installed with pip install -e ., the same runs as: bite, bite --free, ...)
+    bite                      check the last 40 commits made with Claude Code (needs a key for step 2)
+    bite --free               step 1 only: no key, no cost
+    bite --all                every commit, not only Claude-made ones
+    bite --last 80 --suspects 3 --budget 1.00
+    bite --serious            only fix claims about data, money, logins, security, crashes or leaks
+    bite --any                check commits even when none of them claims a fix
+    (from a clone without installing: python recent.py, python recent.py --free, ...)
 
 Step 1 (free): for each commit that changed code, the change is taken back out and the tests are run. If they
 still pass, no test shows the change does anything ("unguarded"). If the commit added or changed tests and
@@ -18,13 +18,13 @@ small test (with the odd inputs the claim covers) on a copy of the project at th
 test itself, twice, at that commit and on today's code, and a second fresh check must agree that the test asks
 only for what the commit claimed and fails for a real reason. Only then is it shown as a false "done".
 
-Proof is written to bite_proof/ in the repo: each failing test plus the command that runs it.
+Results are written to bite_proof/ in the repo: report.html (one page to open in a browser), and each
+failing test plus the command that runs it.
 Settings: .bite.ini in the repo (optional; first line [kit], then test_command = ...). claim_command runs one
 test file ({file}); without it Bite adds the file to test_command (for dotnet test it adds a --filter instead).
 test_covers = the paths the test command can reach (globs, comma-separated, e.g. Assets/Sim/*, tests/*): commits
 that touch none of them are listed as outside the tests' reach, not checked. free_test_command = a faster subset
 of the tests for step 1 (step 2 still uses test_command).
-Needs bite.py and repo.py next to it.
 
 Bite needs an API key for step 2 and never uses a Claude login or plan: Anthropic's rules for tools built on the
 Agent SDK (https://code.claude.com/docs/en/agent-sdk/overview) say they must use API keys.
@@ -514,6 +514,79 @@ def save_log(root: Path, tried: list, cs: list) -> None:
         {k: c.get(k) for k in ("sha", "subject", "undo", "score")} for c in cs]}, indent=1), encoding="utf-8")
 
 
+def plain(undo: str) -> tuple[str, str]:
+    """The free check's result as (kind, words) for the report: kind is held, gap, odd or skip."""
+    if undo.startswith(("guarded", "closed since")):
+        return "held", "Held: a test fails when this change is taken out"
+    if undo == "TEST GUARDS NOTHING":
+        return "odd", "Its own tests still pass without its code: they check nothing it changed"
+    if undo.startswith("unguarded"):
+        return "gap", "No test notices if this change is taken out"
+    return "skip", "Couldn't check: " + undo.replace("not flagged: ", "")
+
+
+def commit_link(root: Path) -> str:
+    """https://github.com/owner/name/commit/ for a GitHub origin, else "" (the report then shows plain shas)."""
+    url = repo.git(root, "remote", "get-url", "origin") or ""
+    m = re.search(r"github\.com[:/]([^/]+/[^/]+?)(?:\.git)?/?$", url)
+    return f"https://github.com/{m.group(1)}/commit/" if m else ""
+
+
+def write_html(root: Path, cs: list, tried: list, seconds: float) -> Path:
+    """One page that says what was checked and how each commit did, to open in a browser or screenshot."""
+    import html
+    from datetime import datetime
+    e = html.escape
+    link = commit_link(root)
+    checked = [c for c in cs if c.get("undo")]
+    kinds = [plain(c["undo"])[0] for c in checked]
+    false_done = [r for r in tried if r.get("status") == "FALSE DONE"]
+    sha = lambda x: (f'<a href="{e(link + x)}">{x[:8]}</a>' if link else x[:8])  # noqa: E731
+    rows = "".join(f'<tr class="{k}"><td><code>{sha(c["sha"])}</code></td><td>{e(c["subject"][:90])}</td>'
+                   f'<td><span class="dot"></span>{e(w)}' + (f'<div class="why">{e(c["why"])}</div>' if c.get("why") else "")
+                   + "</td></tr>" for c in checked for k, w in [plain(c["undo"])])
+    claims = "".join(f'<tr class="{"odd" if r["status"] == "FALSE DONE" else "held" if r["status"] == "holds" else "skip"}">'
+                     f'<td><code>{sha(r["sha"])}</code></td><td>{e(r["subject"][:90])}</td><td><span class="dot"></span>'
+                     + (f'False "done": {e(r.get("bug", ""))} Today\'s code: {e(r.get("today", ""))}.'
+                        if r["status"] == "FALSE DONE" else "The claim held" if r["status"] == "holds" else e(r["status"]))
+                     + "</td></tr>" for r in tried)
+    tiles = [(len(checked), "commits checked", ""), (kinds.count("held"), "held", "held"),
+             (kinds.count("gap") + kinds.count("odd"), "no test guards them", "gap"),
+             (kinds.count("skip"), "couldn't check", "skip")]
+    if tried:
+        tiles.append((len(false_done), f"false \"done\" of {len(tried)} claims tested", "odd"))
+    page = f"""<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bite report: {e(root.name)}</title>
+<style>
+:root{{--bg:#fbfaf7;--fg:#1d1d1b;--mute:#6b6a65;--line:#e4e1d8;--held:#2e7d4f;--gap:#b7791f;--odd:#c0392b;--skip:#8a8a85}}
+@media (prefers-color-scheme:dark){{:root{{--bg:#161615;--fg:#ecebe6;--mute:#9a9992;--line:#2c2b29;--held:#5fbf86;--gap:#e0a84a;--odd:#ef6b5b;--skip:#7d7c77}}}}
+body{{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}}
+main{{max-width:920px;margin:0 auto;padding:32px 16px}} h1{{margin:0;font-size:28px}} h2{{font-size:18px;margin:32px 0 8px}}
+.sub{{color:var(--mute)}} a{{color:inherit}} code{{font:13px ui-monospace,Consolas,monospace}}
+.tiles{{display:flex;flex-wrap:wrap;gap:12px;margin:24px 0}} .tile{{flex:1 1 140px;border:1px solid var(--line);border-radius:10px;padding:12px 14px}}
+.tile b{{display:block;font-size:30px;line-height:1.1}} .tile.held b{{color:var(--held)}} .tile.gap b{{color:var(--gap)}}
+.tile.odd b{{color:var(--odd)}} .tile.skip b{{color:var(--skip)}}
+table{{width:100%;border-collapse:collapse}} td{{padding:8px 6px;border-top:1px solid var(--line);vertical-align:top}}
+td:first-child{{white-space:nowrap}} .dot{{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px;background:var(--skip)}}
+.held .dot{{background:var(--held)}} .gap .dot{{background:var(--gap)}} .odd .dot{{background:var(--odd)}}
+.why{{color:var(--mute);font-size:13px}} footer{{margin-top:32px;color:var(--mute);font-size:13px}}
+</style>
+<main>
+<h1>Bite report: {e(root.name)}</h1>
+<div class="sub">{datetime.now():%Y-%m-%d %H:%M} &middot; did the recent "fixed" commits hold? &middot; {seconds:.0f}s, ${SPENT[0]:.2f}</div>
+<div class="tiles">{"".join(f'<div class="tile {k}"><b>{n}</b>{e(t)}</div>' for n, t, k in tiles)}</div>
+{f'<h2>Claims tested</h2><table>{claims}</table>' if tried else ""}
+<h2>Free check: does a test notice if each change is taken out?</h2>
+{f'<table>{rows}</table>' if rows else '<p class="sub">No commits were checked.</p>'}
+<footer>"Held" means a test fails when the change is taken out. It doesn't prove the commit has no other bugs.
+Details and rerun commands are in the other files in this folder. Made by <a href="https://github.com/connabyss/bite">Bite</a>.</footer>
+</main>
+"""
+    out = proof_dir(root) / "report.html"
+    out.write_text(page, encoding="utf-8")
+    return out
+
+
 def gap(c: dict) -> str:
     """What the tests miss, in one plain line."""
     if c.get("undo") == "TEST GUARDS NOTHING":
@@ -711,6 +784,7 @@ def main(argv=None):
         print(f"Each flagged commit, with a check you can rerun and a note for your Claude: {write_free(root, cfg, flagged)}")
     print(f"\n{time.time() - t0:.0f}s, ${SPENT[0]:.2f}")
     save_log(root, tried, cs)
+    print(f"One-page report (open it in your browser): {write_html(root, cs, tried, time.time() - t0)}")
     return 0
 
 

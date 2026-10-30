@@ -383,6 +383,16 @@ with patch.object(recent.shutil, "which", lambda name: None if name == "git" els
     rc, out = run(root, ["--free"], fake_worker())
 check("first run: no git says how to get it, no traceback", rc == 1 and "git isn't installed" in out)
 
+# Report: every run leaves one page that says what was checked and how each commit did.
+root = make_repo()
+(root / "calc.py").write_text((root / "calc.py").read_text() + "\n\ndef neg(x):\n    return -x\n")
+commit(root, "Fix <b>neg</b> & friends" + CLAUDE)
+rc, out = run(root, ["--free"], fake_worker())
+page = (root / "bite_proof" / "report.html").read_text(encoding="utf-8") if rc == 0 else ""
+check("report: report.html is written and named at the end of a run", "report.html" in out and "<table>" in page)
+check("report: a commit nobody's test guards is shown as such", "No test notices if this change is taken out" in page)
+check("report: commit subjects are escaped, not run as HTML", "Fix &lt;b&gt;neg&lt;/b&gt; &amp; friends" in page)
+
 # Docs: the key rule is stated where a reader looks first.
 for doc in ("CLAUDE.md", "README.md"):
     t = (KIT / doc).read_text(encoding="utf-8")
