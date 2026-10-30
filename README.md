@@ -88,4 +88,9 @@ Each bug was reproduced with a standalone script in a clean environment before i
 Bug reports, fixes and AI-assisted PRs are all welcome. See [CONTRIBUTING.md](CONTRIBUTING.md). If Bite flagged
 something wrongly, or missed a claim you know was false, please [open an issue](../../issues/new/choose).
 
+Thank you to Bite's first contributors:
+
+- [@snehaapratap](https://github.com/snehaapratap) made the setup error messages point to steps that exist ([#18](https://github.com/connabyss/bite/pull/18)).
+- [@gauravjangra3165](https://github.com/gauravjangra3165) added macOS to the tests ([#19](https://github.com/connabyss/bite/pull/19)).
+
 MIT licensed.
