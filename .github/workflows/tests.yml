@@ -12,7 +12,9 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         python: ["3.10", "3.13"]
-    runs-on: ${{ matrix.os }}
+    # GitHub is short on Apple-chip Macs, so macos-latest jobs sit queued and get cancelled.
+    # Run the Mac jobs on Intel Macs; the job names (and the required checks) stay the same.
+    runs-on: ${{ matrix.os == 'macos-latest' && 'macos-15-intel' || matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
