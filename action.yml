@@ -43,8 +43,9 @@ runs:
           body=bite_proof/COMMENT.md
           if [ ! -f "$body" ]; then
             mkdir -p bite_proof
-            printf '<!-- bite-check -->\n### ➖ Bite: nothing here it could check\n\n%s\n' \
-              "No commit in this pull request changed code that Bite can test." > "$body"
+            printf '<!-- bite-check -->\n### ➖ Bite: nothing here it could check\n\n%s\n\n%s\n' \
+              "No commit in this pull request changed code that Bite can test." \
+              "[What is Bite?](https://github.com/connabyss/bite)" > "$body"
           fi
           id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
             --jq '.[] | select(.body | startswith("<!-- bite-check -->")) | .id' | head -n 1) &&
