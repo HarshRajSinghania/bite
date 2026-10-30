@@ -37,8 +37,8 @@ pipx inject bite-check claude-agent-sdk
 Each claim costs about $0.13, and `--budget` caps the total ($1 by default). Bite needs an API key for this step and never uses a Claude login or plan
 (Anthropic's Agent SDK rule: https://code.claude.com/docs/en/agent-sdk/overview).
 
-Works with pytest, npm test, cargo test, go test and dotnet test. Settings and limits: [CLAUDE.md](CLAUDE.md),
-written so your own Claude can set Bite up for you. To work on Bite itself: clone it, `pip install -e .[test]`, then `python -m pytest`.
+Works with pytest, npm test, cargo test, go test and dotnet test. Settings and limits: [AGENTS.md](AGENTS.md),
+written so your coding AI (Claude Code, Codex, Cursor, Copilot) can set Bite up for you. To work on Bite itself: clone it, `pip install -e .[test]`, then `python -m pytest`.
 
 ## The catch that shows what it's for
 
