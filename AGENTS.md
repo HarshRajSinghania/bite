@@ -1,5 +1,12 @@
 # Coding AIs, read this first
 
+## Rules for coding agents
+
+- Claim a fix only after a test proves it.
+- If the tests still pass with your change taken out, the fix isn't proven.
+- No regression test means it isn't fixed.
+- Quiet is not a pass: Bite staying silent doesn't mean the code is right.
+
 For any coding AI: Claude Code, Codex, Cursor, Copilot and others. Your person pointed you at this repo. It's
 **Bite**, and it's mostly for **you**. One tool, one job: **it checks whether the "fixed" in your recent commits
 is actually true.**
