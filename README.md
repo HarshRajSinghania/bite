@@ -30,6 +30,21 @@ Close the terminal window and open a new one, then:
 
 ```
 pipx install bite-check
+bite --demo
+```
+
+`bite --demo` builds a tiny made-up shop project in a temporary folder and runs the free check on it. Two of
+its commits say they fixed something: one added a test for its fix, the other didn't. Bite takes each fix back
+out and runs the tests, and you see the difference:
+
+```
+  9661edcf ✅ noticed by test_discount_never_below_zero Fix discounts over 100% making the price negative
+  e5c329ec ⚠️ NO TEST NOTICED           Fix totals showing long decimals like 0.30000000000000004
+```
+
+It needs nothing besides git, takes a few seconds, and doesn't touch your files. Then try it on your own project:
+
+```
 cd /path/to/your-repo
 bite --free
 ```

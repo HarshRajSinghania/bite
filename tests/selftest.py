@@ -618,6 +618,19 @@ check("pull request: an unknown --since is named, not taken as 'nothing to check
 check("action.yml: the pull request check looks only at the pull request's own commits (--since the base)",
       '--since "$BASE"' in (KIT / "action.yml").read_text(encoding="utf-8"))
 
+# bite --demo: a made-up project where one fix has a test and one doesn't, so a first run shows both results.
+buf = io.StringIO()
+with contextlib.redirect_stdout(buf):
+    rc = recent.main(["--demo"])
+out = buf.getvalue()
+check("--demo: the fix with a test is noticed and the fix without one is flagged",
+      rc == 0 and "noticed by test_discount_never_below_zero" in out
+      and 'NO TEST NOTICED: ' in out and "Fix totals showing long decimals" in out.split("NO TEST NOTICED: ", 1)[-1])
+shown = [ln.rstrip() for ln in out.splitlines() if "✅ noticed" in ln or "⚠️ NO TEST NOTICED  " in ln]
+readme = (KIT / "README.md").read_text(encoding="utf-8")
+check(f"README.md: shows bite --demo and the same two lines a demo run prints (got {shown})",
+      "bite --demo" in readme and len(shown) == 2 and all(ln in readme for ln in shown))
+
 # Docs: the key rule is stated where a reader looks first.
 for doc in ("AGENTS.md", "README.md"):
     t = (KIT / doc).read_text(encoding="utf-8")
