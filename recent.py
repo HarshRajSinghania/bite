@@ -636,22 +636,38 @@ def gap(c: dict) -> str:
     return "no test fails with its code change taken out, so nothing would notice if it broke or was lost."
 
 
+def undo_steps(root: Path, sha: str, files: list) -> list:
+    """The commands that take a commit's code change back out: restore the files it edited, delete the ones it
+    created. `git checkout <sha>^ -- <file>` fails for a file the commit added, so it can't carry those."""
+    restored, created = [], []
+    for rel in files:
+        target = restored if repo.git(root, "cat-file", "blob", f"{sha}^:{rel}", raw=True) is not None else created
+        target.append(rel)
+    steps = []
+    if created:
+        steps.append("rm -f " + " ".join(created))
+    if restored:
+        steps.append(f"git checkout {sha}^ -- {' '.join(restored)}")
+    return steps
+
+
 def write_free(root: Path, cfg, flagged: list) -> Path:
     """The free pass's findings, each with a rerun recipe and a note to hand to the user's own Claude."""
     lines = ["# Bite: changes no test checks", "",
              "Found by taking each commit's code change back out (keeping its tests) and running the tests: they "
              "still passed. Free; no model was used.", ""]
     for i, c in enumerate(flagged, 1):
-        sha, files = c["sha"], " ".join(c["code"])
+        sha = c["sha"]
+        steps = undo_steps(root, sha, c["code"])
         lines += [f"## {i}. {sha[:8]} {c['subject']}", "", f"- What's missing: {gap(c)[0].upper() + gap(c)[1:]}",
                   f"- Code it changed: {', '.join(c['code'])}", "", "Check it yourself (a throwaway copy; your checkout "
                   "isn't touched):", "", "```", f"git worktree add ../bite_check {sha}", "cd ../bite_check",
-                  f"git checkout {sha}^ -- {files}", f"{cfg.test_cmd}", "# the tests pass: nothing caught the change being undone",
+                  *steps, f"{cfg.test_cmd}", "# the tests pass: nothing caught the change being undone",
                   f"cd {root.as_posix()}", "git worktree remove --force ../bite_check", "```", "", "Hand this to your Claude:", "", "```",
                   f"Commit {sha[:8]} (\"{c['subject']}\") changed {', '.join(c['code'])}. With that change undone, "
                   f"the tests still pass ({'its own tests: ' + ', '.join(c['test_code']) if c.get('test_code') else 'no test covers it'}). "
                   "Write one small test of what this commit changed, next to the existing tests. Show that it fails "
-                  f"with the change undone (git checkout {sha[:8]}^ -- {files} in a throwaway worktree) and passes "
+                  f"with the change undone ({'; '.join(steps)} in a throwaway worktree) and passes "
                   "with it. Don't change the code.", "```", ""]
     p = proof_dir(root) / "FREE_REPORT.md"
     p.write_text("\n".join(lines), encoding="utf-8")
