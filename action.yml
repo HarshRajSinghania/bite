@@ -6,8 +6,8 @@ branding:
 
 inputs:
   args:
-    description: Extra options for bite (see bite --help). --all checks every commit, not only ones made with Claude Code.
-    default: --all
+    description: Extra options for bite (see bite --help), e.g. --serious.
+    default: ""
   max-commits:
     description: Check at most this many of the pull request's commits (each one runs the tests twice).
     default: "20"

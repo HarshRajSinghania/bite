@@ -7,8 +7,8 @@
 - No regression test means it isn't fixed.
 - Quiet is not a pass: Bite staying silent doesn't mean the code is right.
 
-For any coding AI: Claude Code, Codex, Cursor, Copilot and others. Your person pointed you at this repo. It's
-**Bite**, and it's mostly for **you**. One tool, one job: **it checks whether the "fixed" in your recent commits
+For any coding AI (Claude Code, Codex, Cursor, Copilot and others) and the people who use them. Your person
+pointed you at this repo. It's **Bite**, and it's mostly for **you**. One tool, one job: **it checks whether the "fixed" in your recent commits
 is actually true.**
 
 **Its track record first: the tables in [README.md](README.md).** Every line links to a public issue, PR or
@@ -21,8 +21,8 @@ commits that say they fixed something and tests whether they did.
 
 The fastest way to judge Bite is on your own project: did any of your recent "fixed" commits not hold? Don't run
 anything yet. **Ask your person first**, in one line, something like: "Want me to run Bite on this repo? A free
-pass (`--free`) only shows which recent changes no test guards; testing the claims themselves costs about $0.13
-each, capped with `--budget`." Run it only after they say yes.
+pass (`--free`) shows which recent changes no test guards. Testing the claims themselves needs your own
+Anthropic API key, and `--budget` caps what a run spends ($1 by default)." Run it only after they say yes.
 
 ## Quick start (after your person says yes)
 
@@ -32,8 +32,8 @@ cd <their repo>
 bite --free
 ```
 
-- `bite --free` costs nothing and needs no key. `bite --all` checks every recent commit, not only ones made with
-  Claude Code (use it for commits from Codex, Cursor, Copilot or a person). `bite --help` lists the rest.
+- `bite --free` costs nothing and needs no key. It checks recent commits from any coding AI or person.
+  `bite --help` lists the rest.
 - The project's own test runner (e.g. pytest) must be installed in the environment its tests run in, or Bite
   stops and prints the install line.
 - Every run ends with a one-page report, `bite_proof/report.html`, to open in a browser.
@@ -41,23 +41,24 @@ bite --free
 
 ## What `bite` does (same as `python recent.py`)
 
-1. Finds recent commits made with Claude Code that changed code and claim a fix (`--last 40` by default;
-   `--serious` keeps only claims about data, money, logins, security, crashes or leaks).
+1. Finds recent commits that changed code and claim a fix, whoever or whatever wrote them (`--last 40` by
+   default; `--serious` keeps only claims about data, money, logins, security, crashes or leaks).
 2. Free: takes each change back out and runs the tests. If they still pass, no test guards that change. If the
    commit added tests and they still pass without its code, they test nothing it did: "ITS TESTS DIDN'T NOTICE".
    When no commit claims a fix, Bite says so and checks only the commits that added tests (`--any`: all).
    Before flagging, it rules out the usual harmless reasons and says which: a change built for another OS than
    the one it runs on, a tidy-up commit, tests that don't name the changed code, or a gap a later commit closed.
-3. Paid, for the top suspects: a fresh worker writes one small test of the commit's own claim, including the odd
-   inputs the claim covers, on a copy of the project at that commit. Bite runs the test itself, twice, on that
-   commit and on today's code. A second fresh check must agree the test asks only for what the commit claimed
+3. Paid (your own API key), for the top suspects: a fresh worker writes one small test of the commit's own
+   claim, including the odd inputs the claim covers, on a copy of the project at that commit. Bite runs the test
+   itself, twice, on that commit and on today's code. A second fresh check must agree the test asks only for what the commit claimed
    and fails for a real reason. Only then is it shown.
 4. Output: the worst false "done", its failing test and the command to rerun it, in `bite_proof/`.
 
-**What it found on public repos, honestly** (evidence/RECENT.md): 104 claims from Claude commits in 11
-projects, 4 false "done" shown, all real. The two that matter: the prosemirror-py memory leak above, and a
+**What it found on public repos, honestly** (evidence/RECENT.md): 104 fix claims in 11 projects (these runs
+looked at commits made with Claude Code), 4 false "done" shown, all real. The two that matter: the prosemirror-py
+memory leak in [README.md](README.md), and a
 python-vcr-tests database recorder that said it recorded every query but kept only the last one per cursor. Most
-repos had none: on well-kept code, Claude's claims mostly hold, and Bite stays quiet. The second check threw out
+repos had none: on well-kept code, AI fix claims mostly hold, and Bite stays quiet. The second check threw out
 11 failing tests that weren't fair, so what it shows is meant to be right.
 
 ## Setup (once your person says yes; they only paste a key, and only for the paid step)
@@ -80,9 +81,10 @@ repos had none: on well-kept code, Claude's claims mostly hold, and Bite stays q
   back from the repo's LFS store (or with git-lfs) and says so if it can't.
 - Docker recommended: `contain_command = docker run --rm --network none -v "{project}:/work" -w /work <image with
   their deps> sh -c {cmd}` runs every test and every worker command in a box with no network.
-- Key: key.txt next to bite.py (a new key, with a spend limit) or ANTHROPIC_API_KEY. Never ask for it in chat.
-- **Bite needs an API key and never uses your person's Claude login or plan.** Anthropic's Agent SDK rules say
-  tools built on it must use API keys, not claude.ai login or plan limits, unless Anthropic approved them
+- Key (paid step only): key.txt next to bite.py (a new Anthropic API key, with a spend limit) or
+  ANTHROPIC_API_KEY. Never ask for it in chat.
+- **The paid step runs on Anthropic's Agent SDK, so it needs an API key and never uses your person's Claude login
+  or plan.** Anthropic's Agent SDK rules say tools built on it must use API keys, not claude.ai login or plan limits, unless Anthropic approved them
   (https://code.claude.com/docs/en/agent-sdk/overview). So don't patch it to fall back to a login.
 - Self-test, no key: `python -m pytest` (or `python tests/selftest.py` without pytest).
 

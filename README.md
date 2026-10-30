@@ -29,15 +29,15 @@ change back out, runs your tests, and lists the changes no test guards, plus any
 without its commit's code (it tests nothing). If something it needs is missing, like git or pytest, it says
 so and gives you the line that installs it. Each run ends with a one-page report, `bite_proof/report.html`, to open in your browser. To update Bite later, run the install line again with `--force`: `pipx install --force git+https://github.com/connabyss/bite`.
 
-To test the claims themselves, add the paid step's one extra package and set `ANTHROPIC_API_KEY`, then run
-`bite`:
+To test the claims themselves (the paid step), add one extra package and set `ANTHROPIC_API_KEY`, then run `bite`:
 
 ```
 pipx inject bite-check claude-agent-sdk
 ```
 
-Each claim costs about $0.13, and `--budget` caps the total ($1 by default). Bite needs an API key for this step and never uses a Claude login or plan
-(Anthropic's Agent SDK rule: https://code.claude.com/docs/en/agent-sdk/overview).
+This step uses your own API key, and `--budget` caps what a run spends ($1 by default). It runs on Anthropic's
+Agent SDK, so it needs an API key and never uses a Claude login or plan (Anthropic's Agent SDK rule:
+https://code.claude.com/docs/en/agent-sdk/overview). The commits Bite checks can come from any coding AI or person.
 
 Works with pytest, npm test, cargo test, go test and dotnet test. Settings and limits: [AGENTS.md](AGENTS.md),
 written so your coding AI (Claude Code, Codex, Cursor, Copilot) can set Bite up for you. To work on Bite itself: clone it, `pip install -e .[test]`, then `python -m pytest`.
@@ -69,9 +69,8 @@ jobs:
       - uses: connabyss/bite@v0.3.0
 ```
 
-Options go under `with:`: `args` (extra `bite` options, default `--all`, which checks every commit, not only
-ones made with Claude Code), `max-commits` (default 20), `fail-on-gap` (set to `false` to report without
-failing) and `comment` (set to `false` for no comment). It posts one comment on the pull request that says, per
+Options go under `with:`: `args` (extra `bite` options, e.g. `--serious`), `max-commits` (default 20),
+`fail-on-gap` (set to `false` to report without failing) and `comment` (set to `false` for no comment). It posts one comment on the pull request that says, per
 commit, whether a test noticed the change being taken out, and updates that same comment on later pushes. The
 rerun steps for each flagged commit are on the job's summary page.
 
@@ -130,7 +129,7 @@ Each bug was reproduced with a standalone script in a clean environment before i
 
 ## Limits, plainly
 
-- **Most claims hold.** Across all rounds so far, Bite tested 137 "fixed" claims from Claude-made commits that it could run tests for. 8 were false (about 1 in 17), and 4 of those were still broken on today's code. On well-reviewed projects it usually finds nothing, and that's the right answer.
+- **Most claims hold.** Across all rounds so far, Bite tested 137 "fixed" claims that it could run tests for (all from commits made with Claude Code, the AI those rounds looked at). 8 were false (about 1 in 17), and 4 of those were still broken on today's code. On well-reviewed projects it usually finds nothing, and that's the right answer.
 - **Quiet is not a pass.** Bite only shows a failing test that the second check calls fair and real. That second check has thrown out more than 10 failing tests that weren't. A claim that holds proves that one claim, not that the commit has no other bugs.
 - **It needs the project's tests to run.** If they don't run on a clean copy, Bite can't check that commit.
 - **Bug hunting is weaker than claim checking.** In a 10-project overnight hunt, two blind AI judges rated 21 of 22 proven fixes as real bugs and none as wrong, but Bite found only 1 of the 10 bugs the maintainers fixed soon after.
