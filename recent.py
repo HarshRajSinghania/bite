@@ -599,7 +599,7 @@ def write_comment(root: Path, cs: list) -> Path:
     kinds = [plain(c["undo"])[0] for c in checked]
     bad = [c for c, k in zip(checked, kinds) if k in ("gap", "odd")]
     sha = lambda c: f"[`{c['sha'][:8]}`]({link}{c['sha']})" if link else f"`{c['sha'][:8]}`"  # noqa: E731
-    line = lambda c, k: f"- {sha(c)} {html.escape(c['subject'][:70])}: " + (words.get(k) or "➖ " + plain(c["undo"])[1] + ".")  # noqa: E731
+    line = lambda c, k: f"- {sha(c)} {html.escape(c['subject'][:70], quote=False)}: " + (words.get(k) or "➖ " + plain(c["undo"])[1] + ".")  # noqa: E731
     lines = ["<!-- bite-check -->"]
     if bad:
         one = len(bad) == 1
