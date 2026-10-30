@@ -30,6 +30,7 @@ Bite needs an API key for step 2 and never uses a Claude login or plan: Anthropi
 Agent SDK (https://code.claude.com/docs/en/agent-sdk/overview) say they must use API keys.
 """
 
+import ast
 import asyncio
 import io
 import json
@@ -63,7 +64,8 @@ PLATFORM_WORDS = {"win": r"windows|win32|powershell|ntfs|max_path|userprofile|\.
                   "mac": r"macos|mac os|darwin|apfs|osx", "linux": r"linux"}
 HERE = "win" if sys.platform.startswith("win") else "mac" if sys.platform == "darwin" else "linux"
 # Tidy-up commits: nothing in them is meant to change behaviour, so "nothing fails without it" isn't news.
-TIDY = re.compile(r"^(chore|style|ci|refactor|build|docs?|tests?)(\([^)]*\))?!?:|\b(lint|tidy|tidies|sort(ed)? imports|"
+TIDY = re.compile(r"^(chore|style|ci|refactor|build|docs?|tests?)(\([^)]*\))?!?:|^(refactor\w*|renam\w*|clean(s|ed)? ?up|docs?|"
+                  r"document\w*)\b|\b(lint|tidy|tidies|sort(ed)? imports|"
                   r"reformat\w*|formatting|whitespace|typos?)\b", re.I)
 # dotnet test exits 0 when its --filter matches no test: that's a test that never ran, not a claim that holds.
 RAN_NOTHING = re.compile(r"No test matches the given testcase filter|No test is available in")
@@ -140,7 +142,28 @@ def comment_only(root: Path, sha: str, rel: str) -> bool:
         suf = Path(rel).suffix.lower()
         return [t for t in ("".join(bite.strip_comment(ln, suf).split()) for ln in b.decode("utf-8", "replace").splitlines()) if t]
     old, new = code(f"{sha}^"), code(sha)
-    return old is not None and old == new
+    if old is not None and old == new:
+        return True
+    return Path(rel).suffix.lower() == ".py" and old is not None and same_python(root, sha, rel)
+
+
+def same_python(root: Path, sha: str, rel: str) -> bool:
+    """The Python file does the same before and after: only docstrings or layout changed."""
+    def tree(rev):
+        src = repo.git(root, "cat-file", "blob", f"{rev}:{rel}", raw=True)
+        try:
+            t = ast.parse(src or b"")
+        except (SyntaxError, ValueError):
+            return None
+        for node in ast.walk(t):
+            body = getattr(node, "body", None)
+            if (isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and body
+                    and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant)
+                    and isinstance(body[0].value.value, str)):
+                node.body = body[1:] or [ast.Pass()]
+        return ast.dump(t)
+    old = tree(f"{sha}^")
+    return old is not None and old == tree(sha)
 
 
 def files_of(root: Path, c: dict, cfg) -> None:
@@ -269,7 +292,11 @@ def undo_check(root: Path, c: dict, cfg) -> str:
         for rel in c["code"]:
             old = repo.git(root, "cat-file", "blob", f"{c['sha']}^:{rel}", raw=True)
             t = folder / rel
-            if old is None:
+            if old is None and t.suffix == ".py" and t.name != "__init__.py":
+                # A file the commit created: deleting it would let Python find an installed copy (pip install -e .)
+                # and import that instead, so the tests pass. A file that refuses to load stands in for it.
+                bite.safe_write(folder, t, b'raise ImportError("Bite took this file out: the commit it checks made it")\n')
+            elif old is None:
                 t.unlink(missing_ok=True)
             else:
                 bite.safe_write(folder, t, old)

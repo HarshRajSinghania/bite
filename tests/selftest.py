@@ -252,6 +252,19 @@ fresh_rep = (fresh_root / "bite_proof" / "FREE_REPORT.md").read_text()
 checkout_lines = [ln for ln in fresh_rep.splitlines() if "git checkout" in ln]
 check("free report: a file the commit created is deleted, not put in the git checkout line",
       "rm -f fresh.py" in fresh_rep and not any("fresh.py" in ln for ln in checkout_lines))
+# A commit that created a module, in a project that's also pip-installed (#28): with the module deleted from Bite's
+# copy, Python would import the installed one and the commit's own test would pass. PYTHONPATH stands in for the install.
+inst_root = make_repo()
+(inst_root / "fresh.py").write_text("def triple(x):\n    return 3 * x\n")
+(inst_root / "test_fresh.py").write_text("import unittest\nfrom fresh import triple\n\nclass F(unittest.TestCase):\n"
+                                         "    def test_two(self):\n        self.assertEqual(triple(2), 6)\n")
+commit(inst_root, "Fix the scoreboard triple" + CLAUDE)
+installed = Path(tempfile.mkdtemp())
+(installed / "fresh.py").write_text((inst_root / "fresh.py").read_text())
+with patch.dict(os.environ, {"PYTHONPATH": str(installed)}):
+    rc, out = run(inst_root, ["--free", "--last", "1"], fake_worker())
+check("installed copy: a module the commit created isn't loaded from the install instead (#28)",
+      "TEST GUARDS NOTHING" not in out and "guarded" in out)
 rc, out = run(root, ["--free", "--last", "1"], fake_worker())
 check("a run that flags nothing says what it verified", "Checked 1 commit(s): 1 have tests that fail without their change" in out)
 
@@ -271,6 +284,14 @@ rc, out = run(weak_commit(f"Double zero right away on {other_os}"), ["--free", "
 check("noise: a change built for another OS isn't flagged", "TEST GUARDS NOTHING" not in out and "built for" in out)
 rc, out = run(weak_commit("chore(lint): tidy double"), ["--free", "--last", "1"], fake_worker())
 check("noise: a tidy-up isn't flagged", "TEST GUARDS NOTHING" not in out and "tidy-up" in out)
+rc, out = run(weak_commit("Refactor double into one line"), ["--free", "--last", "1"], fake_worker())
+check("noise: a refactor or rename without a \"refactor:\" prefix isn't flagged", "TEST GUARDS NOTHING" not in out and "tidy-up" in out)
+root = make_repo()
+(root / "calc.py").write_text('"""Small number helpers."""\n\n' + (root / "calc.py").read_text().replace(
+    "def double(x):\n", 'def double(x):\n    """Twice x: handles negatives too."""\n'))
+commit(root, "Explain how double handles negatives" + CLAUDE)
+rc, out = run(root, ["--free", "--last", "1"], fake_worker())
+check("noise: a commit that only edits docstrings isn't flagged", "unguarded" not in out and "Nothing to check" in out)
 rc, out = run(weak_commit("Double zero right away", "import unittest\n\nclass D(unittest.TestCase):\n"
                           "    def test_text(self):\n        self.assertEqual('a'.upper(), 'A')\n"), ["--free", "--last", "1"], fake_worker())
 check("noise: tests that don't name the changed code aren't flagged", "TEST GUARDS NOTHING" not in out and "don't name" in out)
