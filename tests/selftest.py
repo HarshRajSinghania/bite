@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 KIT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(KIT))
@@ -80,6 +81,29 @@ def run(root, argv, worker, verdict="REAL"):
         return rc, buf.getvalue()
     finally:
         os.chdir(cwd)
+
+
+# Error guidance must name setup steps that actually exist, without a real key.
+with tempfile.TemporaryDirectory() as tmp:
+    missing = Path(tmp) / "missing.ini"
+    try:
+        recent.bite.Config(missing)
+    except SystemExit as exc:
+        message = str(exc)
+        check("missing config points to optional .bite.ini, not an absent setup command",
+              "missing.ini" in message and ".bite.ini" in message and "optional" in message
+              and "--setup" not in message)
+    else:
+        check("missing config fails clearly", False)
+    with patch.dict(os.environ, {}, clear=True), patch.object(recent.bite, "KEY_FILE", Path(tmp) / "key.txt"):
+        try:
+            recent.bite.load_key()
+        except SystemExit as exc:
+            message = str(exc)
+            check("missing key explains environment and key.txt options, not an absent setup command",
+                  "ANTHROPIC_API_KEY" in message and "key.txt" in message and "--setup" not in message)
+        else:
+            check("missing key fails clearly", False)
 
 
 a = {"subject": "Fix tooltip spacing", "body": "", "sha": "x"}
