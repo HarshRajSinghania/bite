@@ -25,7 +25,7 @@ bite --free
 `bite` now works in any terminal window. `bite --free` needs no key and costs nothing. It takes each recent
 change back out, runs your tests, and lists the changes no test guards, plus any new test that still passes
 without its commit's code (it tests nothing). If something it needs is missing, like git or pytest, it says
-so and gives you the line that installs it. Each run ends with a one-page report, `bite_proof/report.html`, to open in your browser. To update Bite later: `pipx upgrade bite-check`.
+so and gives you the line that installs it. Each run ends with a one-page report, `bite_proof/report.html`, to open in your browser. To update Bite later, run the install line again with `--force`: `pipx install --force git+https://github.com/connabyss/bite`.
 
 To test the claims themselves, add the paid step's one extra package and set `ANTHROPIC_API_KEY`, then run
 `bite`:
