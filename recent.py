@@ -587,6 +587,43 @@ Details and rerun commands are in the other files in this folder. Made by <a hre
     return out
 
 
+def write_comment(root: Path, cs: list) -> Path:
+    """The free check in plain words for a pull request comment (the GitHub Action posts it): a verdict, what to
+    do, then each commit in a collapsed list."""
+    import html
+    link = commit_link(root)
+    words = {"held": "✅ A test fails without this change, so the tests really check it.",
+             "gap": "⚠️ The tests still pass without this change, so no test shows it works yet.",
+             "odd": "⚠️ This commit added tests, but they still pass without its code change, so they don't test it."}
+    checked = [c for c in cs if c.get("undo")]
+    kinds = [plain(c["undo"])[0] for c in checked]
+    bad = [c for c, k in zip(checked, kinds) if k in ("gap", "odd")]
+    sha = lambda c: f"[`{c['sha'][:8]}`]({link}{c['sha']})" if link else f"`{c['sha'][:8]}`"  # noqa: E731
+    line = lambda c, k: f"- {sha(c)} {html.escape(c['subject'][:70], quote=False)}: " + (words.get(k) or "➖ " + plain(c["undo"])[1] + ".")  # noqa: E731
+    lines = ["<!-- bite-check -->"]
+    if bad:
+        one = len(bad) == 1
+        lines += [f"### ⚠️ Bite: {len(bad)} change{'' if one else 's'} worth a look", "",
+                  f"Your tests still pass with {'this change' if one else 'these changes'} taken out, so no test shows "
+                  f"{'it works' if one else 'they work'} yet. That's fine for a change that isn't meant to do anything new (a tidy-up, a "
+                  "rename, docs). Otherwise, nothing would notice if it broke later.", "",
+                  "**What to do:** if the change should do something, add a test that fails without it.", ""]
+        lines += [line(c, plain(c["undo"])[0]) for c in bad]
+    elif "held" in kinds:
+        lines += ["### ✅ Bite: your tests really check the changes in this pull request", "",
+                  "Taking each change back out makes a test fail, so the tests would notice if it broke."]
+    else:
+        lines += ["### ➖ Bite: nothing here it could check", "", "No change in this pull request could be tested this way."]
+    lines += ["", "<details><summary>Every commit, and how Bite checked</summary>", ""]
+    lines += [line(c, k) for c, k in zip(checked, kinds)]
+    lines += ["", "Bite takes each commit's code change back out and runs your tests. A test that really checks a change "
+              "fails when the change is gone. The steps to rerun each check yourself are on the job's summary page. "
+              "[What is Bite?](https://github.com/connabyss/bite)", "", "</details>"]
+    p = proof_dir(root) / "COMMENT.md"
+    p.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return p
+
+
 def gap(c: dict) -> str:
     """What the tests miss, in one plain line."""
     if c.get("undo") == "TEST GUARDS NOTHING":
@@ -784,6 +821,7 @@ def main(argv=None):
         print(f"Each flagged commit, with a check you can rerun and a note for your Claude: {write_free(root, cfg, flagged)}")
     print(f"\n{time.time() - t0:.0f}s, ${SPENT[0]:.2f}")
     save_log(root, tried, cs)
+    write_comment(root, cs)
     print(f"One-page report (open it in your browser): {write_html(root, cs, tried, time.time() - t0)}")
     return 0
 

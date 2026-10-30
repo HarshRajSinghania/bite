@@ -3,6 +3,10 @@ name: bite
 on:
   pull_request:
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   bite:
     runs-on: ubuntu-latest
