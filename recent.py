@@ -10,6 +10,7 @@ Bite: did your coding agent's recent "done" commits really do what they said?
     bite --again              test claims again even if an earlier run already tested them
     bite --all                same as plain bite (kept so older commands still work)
     bite --roast              the same results, worded a little more gently
+    bite --since main         only commits that main doesn't have (the pull request check uses this)
     (from a clone without installing: python recent.py, python recent.py --free, ...)
 
 Step 1 (free): for each commit that changed code, the change is taken back out and the tests are run. If they
@@ -91,8 +92,11 @@ LFS_WARNED = set()
 
 # ---- which commits ---------------------------------------------------------------
 
-def commits(root: Path, last: int) -> list:
-    raw = repo.git(root, "log", f"-n{last}", "--no-merges", "--format=%H%x1f%an%x1f%ae%x1f%s%x1f%b%x1e") or ""
+def commits(root: Path, last: int, since: str = "") -> list:
+    # With since, only commits since doesn't have: a pull request that merged its base back in would otherwise
+    # list the base's newer commits first, crowding out its own.
+    span = [f"{since}..HEAD"] if since else []
+    raw = repo.git(root, "log", f"-n{last}", "--no-merges", "--format=%H%x1f%an%x1f%ae%x1f%s%x1f%b%x1e", *span) or ""
     out = []
     for rec in raw.split("\x1e"):
         parts = rec.strip("\n").split("\x1f")
@@ -795,7 +799,7 @@ def write_proof(root: Path, found: list) -> Path:
 
 # Every option main() accepts; each one must be in the help text above (the self-test checks).
 FLAGS = {"--free", "--all", "--any", "--serious", "--again", "--roast"}
-VALUED = {"--last": int, "--free-checks": int, "--suspects": int, "--budget": float}
+VALUED = {"--last": int, "--free-checks": int, "--suspects": int, "--budget": float, "--since": str}
 
 
 def main(argv=None):
@@ -858,8 +862,13 @@ def main(argv=None):
         print(f"Bite: {missing}")
         write_comment(root, [], error=missing)
         return 1
+    since = opt("--since", "")
+    if since and repo.git(root, "rev-parse", "--verify", "-q", f"{since}^{{commit}}") is None:
+        print(f"Bite: --since {since} isn't a commit or branch in this repository.")
+        write_comment(root, [], error=f"Bite couldn't find {since} (--since) in this repository.")
+        return 1
     t0 = time.time()
-    cs = commits(root, opt("--last", 40))  # --all is still accepted: every commit is the default now
+    cs = commits(root, opt("--last", 40), since)  # --all is still accepted: every commit is the default now
     for c in cs:
         files_of(root, c, cfg)
     cs = [c for c in cs if c["code"]]

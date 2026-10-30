@@ -66,7 +66,7 @@ runs:
         echo "This pull request has $n commit(s) to check."
         rm -f bite_proof/FREE_REPORT.md bite_proof/COMMENT.md
         rc=0
-        bite --free --last "$n" --free-checks "$n" $ARGS || rc=$?
+        bite --free --since "$BASE" --last "$n" --free-checks "$n" $ARGS || rc=$?
         if [ "$rc" -ne 0 ]; then
           post_comment  # says why Bite couldn't run, so last push's comment doesn't stay up
           exit "$rc"
