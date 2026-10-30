@@ -394,10 +394,12 @@ check("report: a commit nobody's test guards is shown as such", "No test notices
 check("report: commit subjects are escaped, not run as HTML", "Fix &lt;b&gt;neg&lt;/b&gt; &amp; friends" in page)
 
 # Docs: the key rule is stated where a reader looks first.
-for doc in ("CLAUDE.md", "README.md"):
+for doc in ("AGENTS.md", "README.md"):
     t = (KIT / doc).read_text(encoding="utf-8")
     check(f"{doc}: says Bite needs an API key and never uses a Claude login, with the SDK rule's link",
           "never uses" in t and "login" in t and "https://code.claude.com/docs/en/agent-sdk/overview" in t)
+check("CLAUDE.md: loads AGENTS.md, so Claude reads the same instructions as every other coding AI",
+      "@AGENTS.md" in (KIT / "CLAUDE.md").read_text(encoding="utf-8"))
 
 print(f"\n{sum(OK)}/{len(OK)} passed")
 sys.exit(0 if all(OK) else 1)
