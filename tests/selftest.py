@@ -113,9 +113,7 @@ for c in (a, b):
 check("claims about saving or data rank above cosmetic ones", b["score"] > a["score"])
 
 root = make_repo()
-cs = recent.commits(root, 40, False)
-check("only Claude-made commits picked", [c["subject"] for c in cs] == ["Add readme", "Fix clamp so values stay between lo and hi"])
-check("--all takes every commit", len(recent.commits(root, 40, True)) == 4)
+check("every commit is picked, whoever or whatever made it", len(recent.commits(root, 40)) == 4)
 
 rc, out = run(root, [], fake_worker())
 check("false done found", 'FALSE "DONE": commit' in out and "Fix clamp" in out)
@@ -238,9 +236,9 @@ check("fake test: a commit's own test that passes without its code is reported, 
       "ITS TESTS DIDN'T NOTICE" in out and "test_double.py" in out and "No fix claims" in out)
 check("fake test: a commit whose test does fail without its code is not", "test_sq.py" not in out)
 rep = (root / "bite_proof" / "FREE_REPORT.md").read_text() if (root / "bite_proof" / "FREE_REPORT.md").is_file() else ""
-check("fake test: the report gives the commit, the gap, a rerun recipe and a note for their Claude",
+check("fake test: the report gives the commit, the gap, a rerun recipe and a note for their coding AI",
       "Double zero right away" in rep and "What Bite saw" in rep and "git worktree add" in rep
-      and "Hand this to your Claude" in rep and "Checked 2 commit(s): a test noticed 1" in out)
+      and "Hand this to your coding AI" in rep and "Checked 2 commit(s): a test noticed 1" in out)
 
 # A flagged commit that created a file: `git checkout <sha>^ -- <file>` has no such path to restore, so the
 # recipe has to delete it instead.
@@ -425,7 +423,7 @@ check("report: report.html is written and named at the end of a run", "report.ht
 check("report: a commit nobody's test guards is shown as such", "No test noticed it was gone" in page)
 note = (root / "bite_proof" / "COMMENT.md").read_text(encoding="utf-8") if rc == 0 else ""
 check("comment: the pull request comment leads with a plain verdict and what to do",
-      note.startswith("<!-- bite-check -->\n### ⚠️ Bite: no test noticed 2 changes") and "**Next:**" in note
+      note.startswith("<!-- bite-check -->\n### ⚠️ Bite: no test noticed 3 changes") and "**Next:**" in note
       and "<details>" in note and "“Fix &lt;b&gt;neg" in note and "<sub>Commit `" in note)
 check("report: commit subjects are escaped, not run as HTML", "Fix &lt;b&gt;neg&lt;/b&gt; &amp; friends" in page)
 

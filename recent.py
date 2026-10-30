@@ -1,9 +1,8 @@
 """
 Bite: did your coding agent's recent "done" commits really do what they said?
 
-    bite                      check the last 40 commits made with Claude Code (needs a key for step 2)
+    bite                      check the last 40 commits (step 2 needs an API key)
     bite --free               step 1 only: no key, no cost
-    bite --all                every commit, not only Claude-made ones
     bite --last 80 --suspects 3 --budget 1.00
     bite --serious            only fix claims about data, money, logins, security, crashes or leaks
     bite --any                check commits even when none of them claims a fix
@@ -13,7 +12,7 @@ Step 1 (free): for each commit that changed code, the change is taken back out a
 still pass, no test shows the change does anything ("unguarded"). If the commit added or changed tests and
 those still pass without its code change, they test nothing it did ("TEST GUARDS NOTHING"). Commits that
 claim a fix come first.
-Step 2 (key, capped by --budget): for the top suspects, a fresh worker turns the commit's own claim into one
+Step 2 (API key, spending capped by --budget): for the top suspects, a fresh worker turns the commit's own claim into one
 small test (with the odd inputs the claim covers) on a copy of the project at that commit. Bite then runs the
 test itself, twice, at that commit and on today's code, and a second fresh check must agree that the test asks
 only for what the commit claimed and fails for a real reason. Only then is it shown as a false "done".
@@ -26,8 +25,9 @@ test_covers = the paths the test command can reach (globs, comma-separated, e.g.
 that touch none of them are listed as outside the tests' reach, not checked. free_test_command = a faster subset
 of the tests for step 1 (step 2 still uses test_command).
 
-Bite needs an API key for step 2 and never uses a Claude login or plan: Anthropic's rules for tools built on the
-Agent SDK (https://code.claude.com/docs/en/agent-sdk/overview) say they must use API keys.
+Step 2 runs on Anthropic's Agent SDK, so it needs an Anthropic API key and never uses a Claude login or plan:
+Anthropic's rules for tools built on the Agent SDK (https://code.claude.com/docs/en/agent-sdk/overview) say they
+must use API keys. The commits it checks can come from any coding AI or person.
 """
 
 import ast
@@ -49,8 +49,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import bite  # noqa: E402
 import repo  # noqa: E402
 
-CLAUDE_MARK = re.compile(r"Co-Authored-By:\s*Claude|Generated with \[?Claude Code|claude\.ai/code|"
-                         r"noreply@anthropic\.com", re.I)
 CLAIM = re.compile(r"\b(fix(e[sd])?|handle[sd]?|prevent[sd]?|correct(s|ed)?|resolve[sd]?|guard|avoid[sd]?|"
                    r"support[sd]?|make[sd]? .* work|no longer|now (works|handles|returns|accepts|respects))\b", re.I)
 NOT_CODE = re.compile(r"\b(docs?|readme|typo|changelog|bump|release|version|lint|format(ting)?|ci|workflow)\b", re.I)
@@ -86,7 +84,7 @@ LFS_WARNED = set()
 
 # ---- which commits ---------------------------------------------------------------
 
-def commits(root: Path, last: int, everyone: bool) -> list:
+def commits(root: Path, last: int) -> list:
     raw = repo.git(root, "log", f"-n{last}", "--no-merges", "--format=%H%x1f%an%x1f%ae%x1f%s%x1f%b%x1e") or ""
     out = []
     for rec in raw.split("\x1e"):
@@ -94,9 +92,8 @@ def commits(root: Path, last: int, everyone: bool) -> list:
         parts += [""] * (5 - len(parts))  # git's output is stripped, so the last body can lose its separator
         if not parts[0]:
             continue
-        sha, name, mail, subject, body = parts
-        if everyone or CLAUDE_MARK.search(body) or CLAUDE_MARK.search(mail) or "claude" in name.lower():
-            out.append({"sha": sha, "subject": subject.strip(), "body": body.strip()})
+        sha, _name, _mail, subject, body = parts
+        out.append({"sha": sha, "subject": subject.strip(), "body": body.strip()})
     return out
 
 
@@ -176,7 +173,7 @@ def files_of(root: Path, c: dict, cfg) -> None:
     c["lines"] = sum(int(x) for x in re.findall(r"(\d+) (?:insertion|deletion)", stat or ""))
     claims = bool(CLAIM.search(c["subject"])) and not NOT_CODE.search(c["subject"])
     c["claims"] = claims
-    # Trailers out first: "Co-Authored-By" would match auth in every Claude commit.
+    # Trailers out first: "Co-Authored-By" would match auth in every co-authored commit.
     said = c["subject"] + " " + re.sub(r"(?im)^[\w-]+-by:.*$", "", c["body"])[:400]
     c["serious"] = claims and bool(MATTERS.search(said))
     c["skip"] = skip_reason(c["subject"], said)
@@ -736,7 +733,7 @@ def undo_steps(root: Path, sha: str, files: list) -> list:
 
 
 def write_free(root: Path, cfg, flagged: list) -> Path:
-    """The free pass's findings, each with a rerun recipe and a note to hand to the user's own Claude."""
+    """The free pass's findings, each with a rerun recipe and a note to hand to the user's own coding AI."""
     lines = ["# Bite: changes no test noticed", "",
              "Bite took each change below out, kept the tests, and ran them. Every test still passed, so nothing would "
              "warn you if the change broke. This check is free; no AI was used.", ""]
@@ -747,7 +744,7 @@ def write_free(root: Path, cfg, flagged: list) -> Path:
                   f"- Code it changed: {', '.join(c['code'])}", "", "Check it yourself (a throwaway copy; your checkout "
                   "isn't touched):", "", "```", f"git worktree add ../bite_check {sha}", "cd ../bite_check",
                   *steps, f"{cfg.test_cmd}", "# every test passes: no test noticed the change was gone",
-                  f"cd {root.as_posix()}", "git worktree remove --force ../bite_check", "```", "", "Hand this to your Claude:", "", "```",
+                  f"cd {root.as_posix()}", "git worktree remove --force ../bite_check", "```", "", "Hand this to your coding AI:", "", "```",
                   f"Commit {sha[:8]} (\"{c['subject']}\") changed {', '.join(c['code'])}. With that change undone, "
                   f"the tests still pass ({'its own tests: ' + ', '.join(c['test_code']) if c.get('test_code') else 'no test covers it'}). "
                   "Write one small test of what this commit changed, next to the existing tests. Show that it fails "
@@ -825,15 +822,14 @@ def main(argv=None):
         write_comment(root, [], error=missing)
         return 1
     t0 = time.time()
-    cs = [c for c in commits(root, opt("--last", 40), "--all" in argv)]
+    cs = commits(root, opt("--last", 40))  # --all is still accepted: every commit is the default now
     for c in cs:
         files_of(root, c, cfg)
     cs = [c for c in cs if c["code"]]
     newest = cs[0]["sha"] if cs else ""  # git log lists the newest first
-    who = "commits" if "--all" in argv else "commits made with Claude Code"
-    print(f"Bite: {len(cs)} {who} changed code in the last {opt('--last', 40)}.", flush=True)
+    print(f"Bite: {len(cs)} commits changed code in the last {opt('--last', 40)}.", flush=True)
     if not cs:
-        print("Nothing to check. Try --all, or a larger --last.")
+        print("Nothing to check. Try a larger --last.")
         write_comment(root, [])
         return 0
     n_out = 0
@@ -930,7 +926,7 @@ def main(argv=None):
           f"{len(checked) - len(held) - len(flagged)} couldn't be checked or skipped"
           + (f"; {n_out} outside the tests' reach" if n_out else "") + ".")
     if flagged:
-        print(f"Each change no test noticed, with a check you can rerun and a note for your Claude: {write_free(root, cfg, flagged)}")
+        print(f"Each change no test noticed, with a check you can rerun and a note for your coding AI: {write_free(root, cfg, flagged)}")
     print(f"\n{time.time() - t0:.0f}s, ${SPENT[0]:.2f}")
     save_log(root, tried, cs)
     write_comment(root, cs, newest=newest)
