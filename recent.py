@@ -67,8 +67,12 @@ PLATFORM_WORDS = {"win": r"windows|win32|powershell|ntfs|max_path|userprofile|\.
 HERE = "win" if sys.platform.startswith("win") else "mac" if sys.platform == "darwin" else "linux"
 # Tidy-up commits: nothing in them is meant to change behaviour, so "nothing fails without it" isn't news.
 TIDY = re.compile(r"^(chore|style|ci|refactor|build|docs?|tests?)(\([^)]*\))?!?:|^(refactor\w*|renam\w*|clean(s|ed)? ?up|docs?|"
-                  r"document\w*)\b|\b(lint|tidy|tidies|sort(ed)? imports|"
+                  r"document\w*)\b|\b(lint|mypy|pyright|tidy|tidies|sort(ed)? imports|"
                   r"reformat\w*|formatting|whitespace|typos?)\b", re.I)
+# A change for another Python version can't be checked on this one ("py3.8 fix", "for Python 3.14"); "3.12+" covers later ones.
+PY_VERSION = re.compile(r"\b(?:py(?:thon)?\s?|for |drop(?:s|ped|ping)? |on )3\.(\d{1,2})\b(\+| and (?:later|newer|up))?")
+# Speed-ups: tests check results, not speed, so the slower old code passing them is expected.
+SPEED = re.compile(r"^perf(\([^)]*\))?!?:|\b(faster|speed(s|ing)?[ -]?up|lazy|lazily|optimi[sz]\w*|performance)\b", re.I)
 # dotnet test exits 0 when its --filter matches no test: that's a test that never ran, not a claim that holds.
 RAN_NOTHING = re.compile(r"No test matches the given testcase filter|No test is available in")
 DOTNET_FILTER = '--filter "FullyQualifiedName~BiteClaim"'
@@ -113,8 +117,15 @@ def skip_reason(subject: str, said: str) -> str:
     if built_for and HERE not in built_for:
         names = {"win": "Windows", "mac": "macOS", "linux": "Linux"}
         return f"built for {'/'.join(sorted(names[o] for o in built_for))}, can't be checked on {names[HERE]}"
+    for_py = [(int(m.group(1)), bool(m.group(2))) for m in PY_VERSION.finditer(text)]
+    here = sys.version_info[1]
+    if for_py and not any(v == here or (later and here > v) for v, later in for_py):
+        versions = "/".join(f"3.{v}" + ("+" if later else "") for v, later in dict.fromkeys(for_py))
+        return f"built for Python {versions}, can't be checked on Python 3.{here}"
     if TIDY.search(subject):
         return "a tidy-up, so there's nothing new to check"
+    if SPEED.search(subject) and not re.search(r"\bfix", subject, re.I):
+        return "a speed-up, and tests check results, not speed"
     return ""
 
 
@@ -151,8 +162,57 @@ def comment_only(root: Path, sha: str, rel: str) -> bool:
     return Path(rel).suffix.lower() == ".py" and old is not None and same_python(root, sha, rel)
 
 
+# Decorators and base classes that never read type hints. Any other (dataclass, BaseModel, a web route) may, so
+# hints under them count as code.
+HINT_BLIND = {"staticmethod", "classmethod", "property", "setter", "getter", "deleter", "abstractmethod", "overload",
+              "override", "final", "cached_property", "lru_cache", "cache", "wraps", "contextmanager", "object", "ABC"}
+
+
+def last_name(node) -> str:
+    node = node.func if isinstance(node, ast.Call) else node
+    return node.attr if isinstance(node, ast.Attribute) else getattr(node, "id", "")
+
+
+def drop_hints(t: ast.AST) -> None:
+    """Type hints out: they don't change what runs, except where a decorator or base class reads them."""
+    def walk(node, blind):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            blind = blind and all(last_name(d) in HINT_BLIND for d in node.decorator_list) and all(
+                last_name(b) in HINT_BLIND for b in getattr(node, "bases", []))
+        if blind and isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            node.returns = None
+            a = node.args
+            for arg in a.posonlyargs + a.args + a.kwonlyargs + [a.vararg, a.kwarg]:
+                if arg is not None:
+                    arg.annotation = None
+        if isinstance(node, ast.If) and last_name(node.test) == "TYPE_CHECKING":
+            node.body = [ast.Pass()]  # imports for the type checker only
+        for field, value in ast.iter_fields(node):
+            if isinstance(value, list):
+                out = []
+                for v in value:
+                    if blind and isinstance(v, ast.AnnAssign) and v.value is not None and isinstance(v.target, ast.Name):
+                        v = ast.Assign(targets=[v.target], value=v.value)
+                    if isinstance(v, ast.AST):
+                        walk(v, blind)
+                    out.append(v)
+                setattr(node, field, out)
+            elif isinstance(value, ast.AST):
+                walk(value, blind)
+    walk(t, True)
+    # Imports from the standard library that nothing uses now were only there for the hints.
+    used = {n.id for n in ast.walk(t) if isinstance(n, ast.Name)}
+    for node in ast.walk(t):
+        body = getattr(node, "body", None)
+        if isinstance(body, list):
+            node.body = [s for s in body if not (
+                isinstance(s, (ast.Import, ast.ImportFrom)) and (getattr(s, "module", None) or s.names[0].name).split(".")[0]
+                in sys.stdlib_module_names | {"typing_extensions"} and not getattr(s, "level", 0)
+                and not any((a.asname or a.name).split(".")[0] in used for a in s.names))] or [ast.Pass()]
+
+
 def same_python(root: Path, sha: str, rel: str) -> bool:
-    """The Python file does the same before and after: only docstrings or layout changed."""
+    """The Python file does the same before and after: only docstrings, type hints or layout changed."""
     def tree(rev):
         src = repo.git(root, "cat-file", "blob", f"{rev}:{rel}", raw=True)
         try:
@@ -165,6 +225,7 @@ def same_python(root: Path, sha: str, rel: str) -> bool:
                     and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant)
                     and isinstance(body[0].value.value, str)):
                 node.body = body[1:] or [ast.Pass()]
+        drop_hints(t)
         return ast.dump(t)
     old = tree(f"{sha}^")
     return old is not None and old == tree(sha)
