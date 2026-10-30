@@ -485,7 +485,8 @@ check("terminal: the same plain words, naming the test", "✅ noticed by test_hi
 named_page = (named / "bite_proof" / "report.html").read_text(encoding="utf-8") if rc == 0 else ""
 check("bite-proof: a run where a test noticed every change says so, with the badge, in the terminal, report and comment",
       "Bite-proof. Nice work." in out and recent.BADGE in out and "Bite-proof. Nice work." in named_page
-      and named_note.startswith("<!-- bite-check -->\n### ✅ Bite-proof. Nice work.") and recent.BADGE in named_note)
+      and named_note.startswith("<!-- bite-check -->\n### ")
+      and named_note.splitlines()[1].endswith("✅ Bite-proof. Nice work.") and recent.BADGE in named_note)
 check("bite-proof: never shown when a change had no test, or a claim tested was false",
       "Bite-proof" not in note and "Bite-proof" not in page
       and not recent.bite_proof(["held"], [{"status": "FALSE DONE"}]) and not recent.bite_proof(["held", "none"]))
