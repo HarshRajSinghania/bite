@@ -129,6 +129,8 @@ Each bug was reproduced with a standalone script in a clean environment before i
 | text-to-cad | A Claude commit added a Python 3.11 syntax check that can't catch the exact bug it was written for (nested same-quote f-strings). Bite sent a test that does catch it, [#708](https://github.com/earthtojake/text-to-cad/pull/708), was merged and released in [0.8.2](https://github.com/earthtojake/text-to-cad/releases/tag/v0.8.2); the maintainer then closed the remaining gaps in [#712](https://github.com/earthtojake/text-to-cad/pull/712). |
 | west | Loading a manifest from data with a reserved project name crashed. Fix [#1013](https://github.com/zephyrproject-rtos/west/pull/1013) approved by two maintainers and merged. |
 | midea-lan | A message encoder got the frame length wrong when no padding was needed. Fix [#251](https://github.com/wuwentao/midea-lan/pull/251) merged. The maintainer [wrote](https://github.com/wuwentao/midea-lan/pull/251): "Thank you @connabyss for submitting this PR and for finding and fixing the 8370 framing bug." |
+| mizani | Number labels picked too few decimals when values were close together (`[0, 10, 10.5]` showed as `10, 10`). Fix [#90](https://github.com/has2k1/mizani/pull/90) merged. The maintainer [wrote](https://github.com/has2k1/mizani/pull/90): "@connabyss, thank you." |
+| pamqp | Bite's free check found three past fixes that no test would notice breaking, including one where `Basic.Reject(requeue=False)` was flipped back to `True`. Tests for all three ([#86](https://github.com/gmr/pamqp/pull/86)) merged. |
 
 ## Sent, waiting for review
 
@@ -141,7 +143,6 @@ Each bug was reproduced with a standalone script in a clean environment before i
 | treg | [#1237](https://github.com/superdesigndev/treg/pull/1237) | A Claude commit's test for an org header passes even with the fix removed, so it guards nothing. |
 | claude-seo | [#392](https://github.com/AgriciDaniel/claude-seo/pull/392) | A Claude commit's `--release` check let a value with a trailing newline through. |
 | marshmallow-fastoneofschema | [#1](https://github.com/Kalepa/marshmallow-fastoneofschema/issues/1), [#2](https://github.com/Kalepa/marshmallow-fastoneofschema/pull/2), [#3](https://github.com/Kalepa/marshmallow-fastoneofschema/pull/3), [#4](https://github.com/Kalepa/marshmallow-fastoneofschema/pull/4) | 3 bugs, one fix each. |
-| mizani | [#90](https://github.com/has2k1/mizani/pull/90) | Number labels picked too few decimals when values were close together (`[0, 10, 10.5]` showed as `10, 10`). |
 | django-modeltranslation | [#831](https://github.com/deschler/django-modeltranslation/pull/831) | Nested `auto_populate()` and `fallbacks()` blocks reset the setting to nothing on exit instead of restoring it. |
 | mypy_boto3_builder | [#395](https://github.com/youtype/mypy_boto3_builder/issues/395) | Reported, no reply yet. |
 | drf-pydantic | [#51](https://github.com/georgebv/drf-pydantic/issues/51) | Reported, no reply yet. |
