@@ -401,5 +401,9 @@ for doc in ("AGENTS.md", "README.md"):
 check("CLAUDE.md: loads AGENTS.md, so Claude reads the same instructions as every other coding AI",
       "@AGENTS.md" in (KIT / "CLAUDE.md").read_text(encoding="utf-8"))
 
+check("action.yml: the pull request check runs the free pass and the README shows how to add it",
+      "bite --free" in (KIT / "action.yml").read_text(encoding="utf-8")
+      and "uses: connabyss/bite@" in (KIT / "README.md").read_text(encoding="utf-8"))
+
 print(f"\n{sum(OK)}/{len(OK)} passed")
 sys.exit(0 if all(OK) else 1)

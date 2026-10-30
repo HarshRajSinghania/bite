@@ -1,0 +1,56 @@
+name: Bite free check
+description: On a pull request, take each commit's code change back out and run the tests. Fails if no test notices.
+branding:
+  icon: check-circle
+  color: green
+
+inputs:
+  args:
+    description: Extra options for bite (see bite --help). --all checks every commit, not only ones made with Claude Code.
+    default: --all
+  max-commits:
+    description: Check at most this many of the pull request's commits (each one runs the tests twice).
+    default: "20"
+  fail-on-gap:
+    description: Fail the check when a commit's change is not guarded by any test.
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - name: Install Bite
+      shell: bash
+      run: pipx install "$GITHUB_ACTION_PATH"
+    - name: Run the free check on this pull request's commits
+      shell: bash
+      env:
+        BASE: ${{ github.event.pull_request.base.sha }}
+        MAX: ${{ inputs.max-commits }}
+        ARGS: ${{ inputs.args }}
+        FAIL: ${{ inputs.fail-on-gap }}
+      run: |
+        if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+          echo "Bite needs the full history: set fetch-depth: 0 on actions/checkout."
+          exit 1
+        fi
+        if [ -z "$BASE" ]; then
+          echo "Bite's check runs on pull requests (on: pull_request)."
+          exit 1
+        fi
+        n=$(git rev-list --count --no-merges "$BASE..HEAD")
+        [ "$n" -gt "$MAX" ] && n=$MAX
+        echo "This pull request has $n commit(s) to check."
+        if [ "$n" -eq 0 ]; then
+          exit 0
+        fi
+        rm -f bite_proof/FREE_REPORT.md
+        bite --free --last "$n" --free-checks "$n" $ARGS
+        if [ -f bite_proof/FREE_REPORT.md ]; then
+          cat bite_proof/FREE_REPORT.md >> "$GITHUB_STEP_SUMMARY"
+          if [ "$FAIL" = "true" ]; then
+            echo "::error::Bite: a change in this pull request isn't guarded by any test (details in the job summary)."
+            exit 1
+          fi
+        else
+          echo "Bite: no change in this pull request is missing a test." >> "$GITHUB_STEP_SUMMARY"
+        fi
