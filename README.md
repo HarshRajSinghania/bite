@@ -40,6 +40,33 @@ Each claim costs about $0.13, and `--budget` caps the total ($1 by default). Bit
 Works with pytest, npm test, cargo test, go test and dotnet test. Settings and limits: [AGENTS.md](AGENTS.md),
 written so your coding AI (Claude Code, Codex, Cursor, Copilot) can set Bite up for you. To work on Bite itself: clone it, `pip install -e .[test]`, then `python -m pytest`.
 
+## Run it on every pull request
+
+Add this file to your repo as `.github/workflows/bite.yml`. On each pull request it runs the free check on that
+pull request's commits and shows a pass or fail check next to your other CI. It fails when a commit's change
+can be taken back out and your tests still pass. No key, no cost.
+
+```yaml
+name: bite
+on: pull_request
+jobs:
+  bite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      # install what your tests need here, e.g. for Python:
+      - uses: actions/setup-python@v5
+      - run: python -m pip install pytest -r requirements.txt
+      - uses: connabyss/bite@main
+```
+
+Options go under `with:`: `args` (extra `bite` options, default `--all`, which checks every commit, not only
+ones made with Claude Code), `max-commits` (default 20) and `fail-on-gap` (set to `false` to report without
+failing). What it found is in the job's summary page.
+
 ## The catch that shows what it's for
 
 In [fellowapp/prosemirror-py](https://github.com/fellowapp/prosemirror-py), commit `3614c96` (co-authored by Claude) says:

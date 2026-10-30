@@ -1,0 +1,19 @@
+name: bite
+
+on:
+  pull_request:
+
+jobs:
+  bite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      # Only the test runner: Bite is installed on its own by the action, so the tests import each copy's code.
+      - run: python -m pip install pytest
+      - uses: ./
