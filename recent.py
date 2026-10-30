@@ -35,6 +35,7 @@ import io
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -225,6 +226,31 @@ def at(cfg, folder: Path):
 
 # ---- step 1: free ----------------------------------------------------------------
 
+def preflight(cfg) -> str:
+    """Why the tests can't run here at all, in words that name the fix, or "" when nothing is plainly missing.
+    Checked once before any copy is made, so a missing runner isn't reported as "exit 1" on every commit."""
+    if cfg.contain:  # the tests run in the box, which brings its own programs
+        return ""
+    for cmd in dict.fromkeys(c for c in (cfg.free_cmd, cfg.test_cmd) if c):
+        if re.search(r"&&|\|\||[|;]|\{", cmd):
+            continue  # a shell line: its first word may not be a program
+        try:
+            words = shlex.split(cmd, posix=not bite.WINDOWS)
+        except ValueError:
+            continue
+        first = words[0].strip('"') if words else ""
+        if not first or first.lower() in {"cd", "set", "env", "call", "start"}:
+            continue
+        if not shutil.which(first):
+            return (f"Bite can't find {first!r}, the first word of the test command ({cmd}). "
+                    "Install it, or set test_command in .bite.ini to the command that runs your tests.")
+        if words[1:3] == ["-m", "pytest"] and subprocess.run([first, "-c", "import pytest"],
+                                                           capture_output=True).returncode != 0:
+            return (f"pytest isn't installed for this Python ({shutil.which(first)}), so your tests can't run. "
+                    f"Install it, then run Bite again:\n    {first} -m pip install pytest")
+    return ""
+
+
 def undo_check(root: Path, c: dict, cfg) -> str:
     """'unguarded' when the tests still pass with this commit's code change taken back out; 'TEST GUARDS NOTHING'
     when that includes the tests the commit itself added or changed (they're kept: only the code is undone)."""
@@ -235,7 +261,7 @@ def undo_check(root: Path, c: dict, cfg) -> str:
     try:
         now = bite.run_tests(fcfg, folder)
         if not now["ok"]:
-            errs = [ln.strip(" E>") for ln in now["out"].splitlines() if re.search(r"\b\w+(?:Error|Exception)\b:", ln)]
+            errs = [ln.strip(" E>") for ln in now["out"].splitlines() if re.search(r"\b\w+(?:Error|Exception)\b:|No module named ", ln)]
             c["why"] = (errs[-1] if errs else now["why"])[:160]
             return "tests fail at this commit"
         if ran_nothing(bite.tests_cmd(fcfg), now["out"]):
@@ -547,6 +573,10 @@ def main(argv=None):
             print(f"Bite: unknown option {argv[i]!r}. Run bite --help for the options.")
             return 2
     opt = lambda k, d: type(d)(argv[argv.index(k) + 1]) if k in argv else d  # noqa: E731
+    if not shutil.which("git"):
+        print("Bite: git isn't installed (or isn't on PATH). Install it from https://git-scm.com, "
+              "then open a new terminal window.")
+        return 1
     root = repo.repo_root(os.getcwd())
     if root is None:
         print("Bite: not inside a git repository.")
@@ -573,6 +603,10 @@ def main(argv=None):
     if not cfg.programs:  # the worker may run the test runner and the project's language, nothing new
         first = cfg.test_cmd.split()[0]
         cfg.programs = sorted({first, "python", "python3", "pytest", "node", "npx", "go", "cargo", "dotnet"} - {"npx"})
+    missing = preflight(cfg)
+    if missing:
+        print(f"Bite: {missing}")
+        return 1
     t0 = time.time()
     cs = [c for c in commits(root, opt("--last", 40), "--all" in argv)]
     for c in cs:
