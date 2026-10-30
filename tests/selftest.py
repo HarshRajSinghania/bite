@@ -541,6 +541,41 @@ check("comment: every kind (worth a look, tests check it, couldn't check, no cod
 check("comment: a run with nothing to check still writes the comment the GitHub Action posts",
       "No commit in this pull request changed code" in notes["nothing in the pull request"])
 
+# A pull request that merged its base back in ("Update branch"): the base's newer commits must not crowd out the
+# pull request's own. GitHub checks out a merge of the pull request into the base, so HEAD is a merge too.
+root = make_repo()
+sh(root, "git", "checkout", "-q", "-b", "pr")
+dated = lambda d: {**os.environ, "GIT_AUTHOR_DATE": d, "GIT_COMMITTER_DATE": d}  # noqa: E731
+def commit_at(msg, d, *extra):
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True, capture_output=True)
+    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", *extra, "-m", msg],
+                   cwd=root, check=True, capture_output=True, env=dated(d))
+(root / "calc.py").write_text((root / "calc.py").read_text() + "\n\ndef half(x):\n    return x / 2\n")
+commit_at("Add half", "2030-01-01T10:00:00")
+sh(root, "git", "checkout", "-q", "-")
+(root / "notes.txt").write_text("ci\n")
+commit_at("CI: run on Intel Macs", "2030-01-01T11:00:00")
+base = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, text=True).stdout.strip()
+sh(root, "git", "checkout", "-q", "pr")
+subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "merge", "-q", "--no-edit", base],
+               cwd=root, check=True, capture_output=True, env=dated("2030-01-01T12:00:00"))
+pr_head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, text=True).stdout.strip()
+subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "checkout", "-q", "--detach", base],
+               cwd=root, check=True, capture_output=True)
+subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "merge", "-q", "--no-ff", "--no-edit", pr_head],
+               cwd=root, check=True, capture_output=True, env=dated("2030-01-01T13:00:00"))
+got = [c["subject"] for c in recent.commits(root, 1, base)]
+check(f"pull request: after merging its base back in, it checks its own commit, not the base's newer one (got {got})",
+      got == ["Add half"])
+rc, out = run(root, ["--free", "--since", base, "--last", "1", "--free-checks", "1"], fake_worker())
+check("pull request: the whole free pass with --since checks the pull request's code commit",
+      "Nothing to check" not in out and "1 commits changed code" in out)
+rc, out = run(root, ["--free", "--since", "no-such-branch"], fake_worker())
+check("pull request: an unknown --since is named, not taken as 'nothing to check'",
+      rc == 1 and "isn't a commit or branch" in out)
+check("action.yml: the pull request check looks only at the pull request's own commits (--since the base)",
+      '--since "$BASE"' in (KIT / "action.yml").read_text(encoding="utf-8"))
+
 # Docs: the key rule is stated where a reader looks first.
 for doc in ("AGENTS.md", "README.md"):
     t = (KIT / doc).read_text(encoding="utf-8")
