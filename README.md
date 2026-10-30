@@ -1,5 +1,7 @@
 # Bite
 
+[![GitHub Marketplace](https://img.shields.io/badge/Marketplace-Bite%20free%20check-blue?logo=github)](https://github.com/marketplace/actions/bite-free-check)
+
 **Bite checks whether an AI coding agent's "fixed" is actually true.**
 
 When a commit says it fixed something, Bite writes one small test of that exact claim, runs it itself on the commit and on today's code, and shows the result only if a second, independent check agrees the test is fair. If the test fails, the "fixed" wasn't.
@@ -44,7 +46,8 @@ written so your coding AI (Claude Code, Codex, Cursor, Copilot) can set Bite up 
 
 Add this file to your repo as `.github/workflows/bite.yml`. On each pull request it runs the free check on that
 pull request's commits and shows a pass or fail check next to your other CI. It fails when a commit's change
-can be taken back out and your tests still pass. No key, no cost.
+can be taken back out and your tests still pass. No key, no cost. It's also listed on the GitHub Marketplace as
+[Bite free check](https://github.com/marketplace/actions/bite-free-check).
 
 ```yaml
 name: bite
