@@ -663,6 +663,12 @@ Details and rerun commands are in the other files in this folder. Made by <a hre
     return out
 
 
+# The cat logo at the start of every comment's heading, so Bite's comments look like Bite's. Hosted on main, not in
+# the comment, because GitHub won't show images written into a comment.
+CAT = ('<img src="https://raw.githubusercontent.com/connabyss/bite/main/assets/bite-avatar.png" '
+       'width="24" height="24" alt="Bite" align="top">')
+
+
 def write_comment(root: Path, cs: list, none: str = "", error: str = "", newest: str = "") -> Path:
     """The free check in plain words for a pull request comment (the GitHub Action posts it): a verdict, what to
     do next, then one line per commit. none says why nothing was checked, error why Bite couldn't start, and newest
@@ -715,6 +721,7 @@ def write_comment(root: Path, cs: list, none: str = "", error: str = "", newest:
               "out, runs your tests, and puts it back. "
               + ("The steps to rerun each check yourself are on the job's summary page. " if bad else "")
               + "[What is Bite?](https://github.com/connabyss/bite)", "", "</details>"]
+    lines[1] = lines[1].replace("### ", f"### {CAT} ", 1)
     p = proof_dir(root) / "COMMENT.md"
     p.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return p
