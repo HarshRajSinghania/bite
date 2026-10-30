@@ -79,6 +79,15 @@ Options go under `with:`: `args` (extra `bite` options, e.g. `--serious`), `max-
 commit, whether a test noticed the change being taken out, and updates that same comment on later pushes. The
 rerun steps for each flagged commit are on the job's summary page.
 
+## Bite-proof badge
+
+When every change Bite checked had a test that noticed it, Bite ends with "Bite-proof. Nice work." and prints a
+badge line you can paste into your README:
+
+[![Bite-proof ✅](https://img.shields.io/badge/Bite--proof-%E2%9C%85-black)](https://github.com/connabyss/bite)
+
+Prefer a gentler wording for the warnings? `bite --roast` gives the same results, phrased differently.
+
 ## The catch that shows what it's for
 
 In [fellowapp/prosemirror-py](https://github.com/fellowapp/prosemirror-py), commit `3614c96` (co-authored by Claude) says:

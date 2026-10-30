@@ -481,6 +481,28 @@ named_note = (named / "bite_proof" / "COMMENT.md").read_text(encoding="utf-8") i
 check("comment: a guarded commit names the test that failed without it",
       "- ✅ The test `test_high` noticed it was gone. If this change breaks later, that test will warn you." in named_note)
 check("terminal: the same plain words, naming the test", "✅ noticed by test_high" in out)
+# Bite-proof (CH 10-30): only when every change checked had a test that noticed it, the same in all three places.
+named_page = (named / "bite_proof" / "report.html").read_text(encoding="utf-8") if rc == 0 else ""
+check("bite-proof: a run where a test noticed every change says so, with the badge, in the terminal, report and comment",
+      "Bite-proof. Nice work." in out and recent.BADGE in out and "Bite-proof. Nice work." in named_page
+      and named_note.startswith("<!-- bite-check -->\n### ✅ Bite-proof. Nice work.") and recent.BADGE in named_note)
+check("bite-proof: never shown when a change had no test, or a claim tested was false",
+      "Bite-proof" not in note and "Bite-proof" not in page
+      and not recent.bite_proof(["held"], [{"status": "FALSE DONE"}]) and not recent.bite_proof(["held", "none"]))
+# --roast changes only the words of the two warnings, the same everywhere; the next step stays.
+rc, out = run(root, ["--free", "--roast"], fake_worker())
+roast_note = (root / "bite_proof" / "COMMENT.md").read_text(encoding="utf-8") if rc == 0 else ""
+roast_page = (root / "bite_proof" / "report.html").read_text(encoding="utf-8") if rc == 0 else ""
+check("roast: the gentle line shows in the terminal, report and comment, with the plain next step",
+      all("If this fix wandered off, nothing would notice. A test would." in t and "add a test that fails without it" in t
+          for t in (out, roast_note, roast_page)) and "No test noticed it was gone" not in roast_note)
+recent.ROAST[0] = True
+odd = recent.say({"sha": "c" * 40, "undo": "TEST GUARDS NOTHING", "test_code": ["test_x"]})[2]
+recent.ROAST[0] = False
+check("roast: its own tests that miss the change get the gentle line too",
+      odd == "⚠️ These tests (`test_x`) are looking the other way. **Next:** make one fail without the change.")
+rc, out = run(root, ["--free"], fake_worker())
+check("roast: off again on the next plain run", "No test noticed it was gone" in out and "wandered off" not in out)
 check("caught_by: reads failing test names from pytest, unittest, go and cargo output",
       recent.caught_by("FAILED tests/t.py::TestA::test_one - assert 1 == 2\nFAILED tests/t.py::test_two\n") == "`test_one` and 1 more"
       and recent.caught_by("FAIL: test_x (t.T.test_x)\n") == "`test_x`" and recent.caught_by("--- FAIL: TestGo (0.00s)") == "`TestGo`"
