@@ -435,6 +435,36 @@ notes = {"worth a look": note}
 for name, cs in (("tests check it", [dict(c1, undo="guarded")]), ("couldn't check", [dict(c1, undo="tests fail at this commit")]),
                  ("no code", [])):
     notes[name] = recent.write_comment(root, cs).read_text(encoding="utf-8")
+# Each situation gets its own verdict (PR #41: red tests got a calm "nothing here it could check").
+c2 = {"sha": "b" * 40, "subject": "two"}
+newest_fails = recent.write_comment(root, [dict(c1, undo="tests fail at this commit", why="NameError: x"),
+                                           dict(c2, undo="guarded")], newest=c1["sha"]).read_text(encoding="utf-8")
+check("comment: tests failing on the newest commit lead with a red verdict and say fix them first",
+      "### ❌ Bite: your tests fail" in newest_fails and "fix those first" in newest_fails and "NameError: x" in newest_fails)
+older_fails = recent.write_comment(root, [dict(c1, undo="tests fail at this commit"), dict(c2, undo="guarded")],
+                                   newest=c2["sha"]).read_text(encoding="utf-8")
+check("comment: tests that failed only on an older commit don't decide the verdict",
+      "### ✅" in older_fails and "Bite skipped it" in older_fails and "❌" not in older_fails)
+notes["no tests ran"] = recent.write_comment(root, [dict(c1, undo="no tests ran at this commit")], newest=c1["sha"]).read_text(encoding="utf-8")
+check("comment: no tests ran is a warning, not a calm dash", "### ⚠️ Bite: no tests ran" in notes["no tests ran"])
+notes["tests fail"] = newest_fails
+check("comment: a commit set aside on purpose says skipped, not couldn't check",
+      "Skipped: a tidy-up" in recent.write_comment(root, [dict(c1, undo="not flagged: a tidy-up (no behaviour change meant)")]).read_text(encoding="utf-8"))
+with patch.dict(os.environ, {"BITE_PR_COMMITS": "34", "BITE_CHECKED_COMMITS": "20"}):
+    big = recent.write_comment(root, [dict(c1, undo="guarded")]).read_text(encoding="utf-8")
+check("comment: a pull request with more commits than were checked says so", "newest 20 of this pull request's 34 commits" in big)
+broken = make_repo()
+(broken / ".bite.ini").write_text("[kit]\ntest_command = no_such_runner_bite run\n")
+rc, out = run(broken, ["--free"], fake_worker())
+notes["couldn't run"] = (broken / "bite_proof" / "COMMENT.md").read_text(encoding="utf-8") if (broken / "bite_proof" / "COMMENT.md").is_file() else ""
+check("comment: when Bite can't run, the comment says why instead of leaving the last one up",
+      rc == 1 and "### ❌ Bite couldn't run" in notes["couldn't run"] and "no_such_runner_bite" in notes["couldn't run"])
+plain_root = make_repo()
+(plain_root / "calc.py").write_text((plain_root / "calc.py").read_text() + "\n\ndef cube(x):\n    return x ** 3\n")
+commit(plain_root, "Add cube" + CLAUDE)
+rc, out = run(plain_root, ["--free", "--last", "1"], fake_worker())
+check("comment: code with no fix claim says no claim to check, not that no code changed",
+      "says it fixes something" in (plain_root / "bite_proof" / "COMMENT.md").read_text(encoding="utf-8"))
 rc, out = run(root, ["--free", "--last", "0"], fake_worker())
 notes["nothing in the pull request"] = (root / "bite_proof" / "COMMENT.md").read_text(encoding="utf-8") if rc == 0 else ""
 how = "Bite takes each commit's code change back out and runs your tests. A test that really checks a change fails when the change is gone."

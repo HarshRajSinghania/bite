@@ -542,14 +542,20 @@ def save_log(root: Path, tried: list, cs: list) -> None:
 
 
 def plain(undo: str) -> tuple[str, str]:
-    """The free check's result as (kind, words) for the report: kind is held, gap, odd or skip."""
+    """The free check's result as (kind, words) for the report: kind is held, gap, odd, fail, none or skip."""
     if undo.startswith(("guarded", "closed since")):
         return "held", "Held: a test fails when this change is taken out"
     if undo == "TEST GUARDS NOTHING":
         return "odd", "Its own tests still pass without its code: they check nothing it changed"
     if undo.startswith("unguarded"):
         return "gap", "No test notices if this change is taken out"
-    return "skip", "Couldn't check: " + undo.replace("not flagged: ", "")
+    if undo == "tests fail at this commit":
+        return "fail", "Couldn't check: the tests already fail at this commit"
+    if undo == "no tests ran at this commit":
+        return "none", "Couldn't check: no tests ran at this commit"
+    if undo.startswith("not flagged: "):
+        return "skip", "Skipped: " + undo[len("not flagged: "):]
+    return "skip", "Couldn't check: " + undo
 
 
 def commit_link(root: Path) -> str:
@@ -614,21 +620,36 @@ Details and rerun commands are in the other files in this folder. Made by <a hre
     return out
 
 
-def write_comment(root: Path, cs: list) -> Path:
+def write_comment(root: Path, cs: list, none: str = "", error: str = "", newest: str = "") -> Path:
     """The free check in plain words for a pull request comment (the GitHub Action posts it): a verdict, what to
-    do, then each commit in a collapsed list."""
+    do, then each commit in a collapsed list. none says why nothing was checked, error why Bite couldn't run, and
+    newest is the pull request's newest commit: only its failing tests decide the verdict (earlier commits often
+    fail and get fixed later)."""
     import html
     link = commit_link(root)
     words = {"held": "✅ A test fails without this change, so the tests really check it.",
              "gap": "⚠️ The tests still pass without this change, so no test shows it works yet.",
-             "odd": "⚠️ This commit added tests, but they still pass without its code change, so they don't test it."}
+             "odd": "⚠️ This commit added tests, but they still pass without its code change, so they don't test it.",
+             "none": "⚠️ No tests ran at this commit, so nothing checks it.",
+             "fail": "❌ Your tests fail at this commit, so Bite couldn't check it.",
+             "fail_old": "➖ Your tests failed at this commit, so Bite skipped it (a later commit may have fixed them)."}
     checked = [c for c in cs if c.get("undo")]
     kinds = [plain(c["undo"])[0] for c in checked]
+    kinds = ["fail_old" if k == "fail" and c["sha"] != newest else k for c, k in zip(checked, kinds)]
     bad = [c for c, k in zip(checked, kinds) if k in ("gap", "odd")]
     sha = lambda c: f"[`{c['sha'][:8]}`]({link}{c['sha']})" if link else f"`{c['sha'][:8]}`"  # noqa: E731
-    line = lambda c, k: f"- {sha(c)} {html.escape(c['subject'][:70], quote=False)}: " + (words.get(k) or "➖ " + plain(c["undo"])[1] + ".")  # noqa: E731
+    why = lambda c: f" Why: {html.escape(c['why'], quote=False).replace('`', chr(39))}." if c.get("why") else ""  # noqa: E731
+    line = lambda c, k: (f"- {sha(c)} {html.escape(c['subject'][:70], quote=False)}: "  # noqa: E731
+                         + (words.get(k) or "➖ " + plain(c["undo"])[1] + ".") + (why(c) if k.startswith("fail") else ""))
     lines = ["<!-- bite-check -->"]
-    if bad:
+    if error:
+        lines += ["### ❌ Bite couldn't run", "", html.escape(error, quote=False), "",
+                  "**What to do:** fix that, then push again. Bite checks again on every push."]
+    elif "fail" in kinds:
+        lines += ["### ❌ Bite: your tests fail, so it can't check this pull request", "",
+                  "Your tests already fail on the newest commit, before Bite takes anything out.", "",
+                  "**What to do:** fix those first. Bite checks again on your next push."]
+    elif bad:
         one = len(bad) == 1
         lines += [f"### ⚠️ Bite: {len(bad)} change{'' if one else 's'} worth a look", "",
                   f"Your tests still pass with {'this change' if one else 'these changes'} taken out, so no test shows "
@@ -636,13 +657,20 @@ def write_comment(root: Path, cs: list) -> Path:
                   "rename, docs). Otherwise, nothing would notice if it broke later.", "",
                   "**What to do:** if the change should do something, add a test that fails without it.", ""]
         lines += [line(c, plain(c["undo"])[0]) for c in bad]
+    elif "none" in kinds and "held" not in kinds:
+        lines += ["### ⚠️ Bite: no tests ran", "", "Your test command ran no tests, so nothing checks this code.", "",
+                  "**What to do:** add tests, or set test_command in .bite.ini to the command that runs them."]
     elif "held" in kinds:
         lines += ["### ✅ Bite: your tests really check the changes in this pull request", "",
                   "Taking each change back out makes a test fail, so the tests would notice if it broke."]
     elif checked:
         lines += ["### ➖ Bite: nothing here it could check", "", "No change in this pull request could be tested this way."]
     else:
-        lines += ["### ➖ Bite: nothing here it could check", "", "No commit in this pull request changed code that Bite can test."]
+        lines += ["### ➖ Bite: nothing here it could check", "",
+                  none or "No commit in this pull request changed code: only docs, settings or tests."]
+    total, last = os.environ.get("BITE_PR_COMMITS", ""), os.environ.get("BITE_CHECKED_COMMITS", "")
+    if total.isdigit() and last.isdigit() and int(total) > int(last) and not error:
+        lines += ["", f"Bite looked at the newest {last} of this pull request's {total} commits."]
     # Every comment ends the same way: the fold, the same few words on how Bite checks, and the link.
     lines += ["", f"<details><summary>{'Every commit, and how Bite checked' if checked else 'How Bite checks'}</summary>", ""]
     lines += [line(c, k) for c, k in zip(checked, kinds)] + ([""] if checked else [])
@@ -742,6 +770,7 @@ def main(argv=None):
         cfg = repo.load_cfg(root)
     except repo.ConfigError as e:
         print(f"Bite: {e}")
+        write_comment(root, [], error=str(e))
         return 1
     cfg.claim_cmd = cfg.free_cmd = ""
     covers = []
@@ -756,6 +785,7 @@ def main(argv=None):
         covers = [g.strip().replace("\\", "/") for g in kit.get("test_covers", "").split(",") if g.strip()]
     if not cfg.test_cmd:
         print("Bite: no test command found; set test_command in .bite.ini")
+        write_comment(root, [], error="Bite found no test command. Set test_command in .bite.ini.")
         return 1
     if not cfg.programs:  # the worker may run the test runner and the project's language, nothing new
         first = cfg.test_cmd.split()[0]
@@ -763,12 +793,14 @@ def main(argv=None):
     missing = preflight(cfg)
     if missing:
         print(f"Bite: {missing}")
+        write_comment(root, [], error=missing)
         return 1
     t0 = time.time()
     cs = [c for c in commits(root, opt("--last", 40), "--all" in argv)]
     for c in cs:
         files_of(root, c, cfg)
     cs = [c for c in cs if c["code"]]
+    newest = cs[0]["sha"] if cs else ""  # git log lists the newest first
     who = "commits" if "--all" in argv else "commits made with Claude Code"
     print(f"Bite: {len(cs)} {who} changed code in the last {opt('--last', 40)}.", flush=True)
     if not cs:
@@ -786,7 +818,7 @@ def main(argv=None):
                   + ", ".join(c["sha"][:8] for c in out), flush=True)
         if not cs:
             print("Nothing the tests can reach. Check test_covers in .bite.ini.")
-            write_comment(root, [])
+            write_comment(root, [], none="The code changed here is outside test_covers in .bite.ini, so the tests can't reach it.")
             return 0
     free_only = "--free" in argv
     if not any(c["claims"] for c in cs) and "--any" not in argv:
@@ -795,7 +827,7 @@ def main(argv=None):
               + (f". Checking the {len(cs)} that added tests: do those tests check the change?" if cs else
                  ". (--any checks them anyway.)"), flush=True)
         if not cs:
-            write_comment(root, [])
+            write_comment(root, [], none="No commit in this pull request says it fixes something, so there's no claim to check.")
             return 0
         free_only = True  # no claim to turn into a test
     if "--serious" in argv:  # only fix claims about data, money, logins, security, crashes or leaks
@@ -803,7 +835,7 @@ def main(argv=None):
         print(f"  {len(cs)} of them claim a fix about data, money, logins, security, crashes or leaks.")
         if not cs:
             print("Nothing serious to check. Run without --serious to test the other claims.")
-            write_comment(root, [])
+            write_comment(root, [], none="No commit claims a fix about data, money, logins, security, crashes or leaks.")
             return 0
     cs.sort(key=lambda c: -c["score"])
     logf = root / "bite_proof" / "recent_log.json"
@@ -872,7 +904,7 @@ def main(argv=None):
         print(f"Each flagged commit, with a check you can rerun and a note for your Claude: {write_free(root, cfg, flagged)}")
     print(f"\n{time.time() - t0:.0f}s, ${SPENT[0]:.2f}")
     save_log(root, tried, cs)
-    write_comment(root, cs)
+    write_comment(root, cs, newest=newest)
     print(f"One-page report (open it in your browser): {write_html(root, cs, tried, time.time() - t0)}")
     return 0
 
