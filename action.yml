@@ -43,9 +43,10 @@ runs:
           body=bite_proof/COMMENT.md  # bite writes it on every run that ends normally
           [ -f "$body" ] || return 0
           id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
-            --jq '.[] | select(.body | startswith("<!-- bite-check -->")) | .id' | head -n 1) &&
-          if [ -n "$id" ]; then
-            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@"$body" > /dev/null
+            --jq '.[] | select(.body | startswith("<!-- bite-check -->")) | .id' | tail -n 1) &&
+          # A new token can't always edit the last comment (say it was posted by another bot): then post a fresh one, and update that one from then on (the newest).
+          if [ -n "$id" ] && gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@"$body" > /dev/null; then
+            :
           else
             gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -F body=@"$body" > /dev/null
           fi || echo "::warning::Bite couldn't post its comment (it needs pull-requests: write; pull requests from forks get a read-only token)."
