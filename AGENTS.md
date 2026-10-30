@@ -46,6 +46,8 @@ bite --free
 2. Free: takes each change back out and runs the tests. If they still pass, no test guards that change. If the
    commit added tests and they still pass without its code, they test nothing it did: "ITS TESTS DIDN'T NOTICE".
    When no commit claims a fix, Bite says so and checks only the commits that added tests (`--any`: all).
+   It only takes out code in the language the tests run (pytest: Python; npm test: JavaScript or TypeScript;
+   cargo, go, dotnet: theirs). A commit that changed only other code is listed as code the tests can't run.
    Before flagging, it rules out the usual harmless reasons and says which: a change built for another OS than
    the one it runs on, a tidy-up commit, tests that don't name the changed code, or a gap a later commit closed.
 3. Paid (your own API key), for the top suspects: a fresh worker writes one small test of the commit's own
