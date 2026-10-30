@@ -431,7 +431,7 @@ check("report: report.html is written and named at the end of a run", "report.ht
 check("report: a commit nobody's test guards is shown as such", "No test noticed it was gone" in page)
 note = (root / "bite_proof" / "COMMENT.md").read_text(encoding="utf-8") if rc == 0 else ""
 check("comment: the pull request comment leads with a plain verdict and what to do",
-      note.startswith("<!-- bite-check -->\n### ⚠️ Bite: no test noticed 3 changes") and "**Next:**" in note
+      note.startswith(f"<!-- bite-check -->\n### {recent.CAT} ⚠️ Bite: no test noticed 3 changes") and "**Next:**" in note
       and "<details>" in note and "“Fix &lt;b&gt;neg" in note and "<sub>Commit `" in note)
 check("report: commit subjects are escaped, not run as HTML", "Fix &lt;b&gt;neg&lt;/b&gt; &amp; friends" in page)
 
@@ -446,13 +446,13 @@ c2 = {"sha": "b" * 40, "subject": "two"}
 newest_fails = recent.write_comment(root, [dict(c1, undo="tests fail at this commit", why="NameError: x"),
                                            dict(c2, undo="guarded")], newest=c1["sha"]).read_text(encoding="utf-8")
 check("comment: tests failing on the newest commit lead with a red verdict and say fix them first",
-      "### ❌ Bite: your tests already fail" in newest_fails and "fix them first" in newest_fails and "NameError: x" in newest_fails)
+      f"### {recent.CAT} ❌ Bite: your tests already fail" in newest_fails and "fix them first" in newest_fails and "NameError: x" in newest_fails)
 older_fails = recent.write_comment(root, [dict(c1, undo="tests fail at this commit"), dict(c2, undo="guarded")],
                                    newest=c2["sha"]).read_text(encoding="utf-8")
 check("comment: tests that failed only on an older commit don't decide the verdict",
-      "### ✅" in older_fails and "Bite skipped it" in older_fails and "❌" not in older_fails)
+      f"### {recent.CAT} ✅" in older_fails and "Bite skipped it" in older_fails and "❌" not in older_fails)
 notes["no tests ran"] = recent.write_comment(root, [dict(c1, undo="no tests ran at this commit")], newest=c1["sha"]).read_text(encoding="utf-8")
-check("comment: no tests ran is a warning, not a calm dash", "### ⚠️ Bite: no tests found" in notes["no tests ran"])
+check("comment: no tests ran is a warning, not a calm dash", f"### {recent.CAT} ⚠️ Bite: no tests found" in notes["no tests ran"])
 notes["tests fail"] = newest_fails
 check("comment: a commit set aside on purpose says skipped, not couldn't check",
       "Skipped: a tidy-up" in recent.write_comment(root, [dict(c1, undo="not flagged: a tidy-up (no behaviour change meant)")]).read_text(encoding="utf-8"))
@@ -464,7 +464,7 @@ broken = make_repo()
 rc, out = run(broken, ["--free"], fake_worker())
 notes["couldn't run"] = (broken / "bite_proof" / "COMMENT.md").read_text(encoding="utf-8") if (broken / "bite_proof" / "COMMENT.md").is_file() else ""
 check("comment: when Bite can't run, the comment says why instead of leaving the last one up",
-      rc == 1 and "### ❌ Bite couldn't start" in notes["couldn't run"] and "no_such_runner_bite" in notes["couldn't run"])
+      rc == 1 and f"### {recent.CAT} ❌ Bite couldn't start" in notes["couldn't run"] and "no_such_runner_bite" in notes["couldn't run"])
 plain_root = make_repo()
 (plain_root / "calc.py").write_text((plain_root / "calc.py").read_text() + "\n\ndef cube(x):\n    return x ** 3\n")
 commit(plain_root, "Add cube" + CLAUDE)
@@ -481,6 +481,28 @@ named_note = (named / "bite_proof" / "COMMENT.md").read_text(encoding="utf-8") i
 check("comment: a guarded commit names the test that failed without it",
       "- ✅ The test `test_high` noticed it was gone. If this change breaks later, that test will warn you." in named_note)
 check("terminal: the same plain words, naming the test", "✅ noticed by test_high" in out)
+# Bite-proof (CH 10-30): only when every change checked had a test that noticed it, the same in all three places.
+named_page = (named / "bite_proof" / "report.html").read_text(encoding="utf-8") if rc == 0 else ""
+check("bite-proof: a run where a test noticed every change says so, with the badge, in the terminal, report and comment",
+      "Bite-proof. Nice work." in out and recent.BADGE in out and "Bite-proof. Nice work." in named_page
+      and named_note.startswith("<!-- bite-check -->\n### ✅ Bite-proof. Nice work.") and recent.BADGE in named_note)
+check("bite-proof: never shown when a change had no test, or a claim tested was false",
+      "Bite-proof" not in note and "Bite-proof" not in page
+      and not recent.bite_proof(["held"], [{"status": "FALSE DONE"}]) and not recent.bite_proof(["held", "none"]))
+# --roast changes only the words of the two warnings, the same everywhere; the next step stays.
+rc, out = run(root, ["--free", "--roast"], fake_worker())
+roast_note = (root / "bite_proof" / "COMMENT.md").read_text(encoding="utf-8") if rc == 0 else ""
+roast_page = (root / "bite_proof" / "report.html").read_text(encoding="utf-8") if rc == 0 else ""
+check("roast: the gentle line shows in the terminal, report and comment, with the plain next step",
+      all("If this fix wandered off, nothing would notice. A test would." in t and "add a test that fails without it" in t
+          for t in (out, roast_note, roast_page)) and "No test noticed it was gone" not in roast_note)
+recent.ROAST[0] = True
+odd = recent.say({"sha": "c" * 40, "undo": "TEST GUARDS NOTHING", "test_code": ["test_x"]})[2]
+recent.ROAST[0] = False
+check("roast: its own tests that miss the change get the gentle line too",
+      odd == "⚠️ These tests (`test_x`) are looking the other way. **Next:** make one fail without the change.")
+rc, out = run(root, ["--free"], fake_worker())
+check("roast: off again on the next plain run", "No test noticed it was gone" in out and "wandered off" not in out)
 check("caught_by: reads failing test names from pytest, unittest, go and cargo output",
       recent.caught_by("FAILED tests/t.py::TestA::test_one - assert 1 == 2\nFAILED tests/t.py::test_two\n") == "`test_one` and 1 more"
       and recent.caught_by("FAIL: test_x (t.T.test_x)\n") == "`test_x`" and recent.caught_by("--- FAIL: TestGo (0.00s)") == "`TestGo`"
@@ -488,8 +510,11 @@ check("caught_by: reads failing test names from pytest, unittest, go and cargo o
 rc, out = run(root, ["--free", "--last", "0"], fake_worker())
 notes["nothing in the pull request"] = (root / "bite_proof" / "COMMENT.md").read_text(encoding="utf-8") if rc == 0 else ""
 how = "Bite asks one question about each change: if it disappeared, would any test notice? It takes the change out, runs your tests, and puts it back."
+check("comment: every kind starts with the same cat logo, the picture in assets/", len(notes) >= 7
+      and all(n.split("\n")[1].startswith(f"### {recent.CAT} ") for n in notes.values())
+      and (KIT / "assets" / "bite-avatar.png").is_file())
 check("comment: every kind (worth a look, tests check it, couldn't check, no code) ends with the same words and link",
-      all(n.startswith("<!-- bite-check -->\n### ") and how in n
+      all(n.startswith(f"<!-- bite-check -->\n### {recent.CAT} ") and how in n
           and n.endswith("[What is Bite?](https://github.com/connabyss/bite)\n\n</details>\n") for n in notes.values()))
 check("comment: a run with nothing to check still writes the comment the GitHub Action posts",
       "No commit in this pull request changed code" in notes["nothing in the pull request"])

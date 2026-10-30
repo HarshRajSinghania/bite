@@ -1,4 +1,9 @@
-# Bite
+<p>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/bite-header-dark.png">
+    <img alt="Bite" src="assets/bite-header-light.png" width="300">
+  </picture>
+</p>
 
 [![GitHub Marketplace](https://img.shields.io/badge/Marketplace-Bite%20free%20check-blue?logo=github)](https://github.com/marketplace/actions/bite-free-check)
 
@@ -78,6 +83,15 @@ Options go under `with:`: `args` (extra `bite` options, e.g. `--serious`), `max-
 `fail-on-gap` (set to `false` to report without failing) and `comment` (set to `false` for no comment). It posts one comment on the pull request that says, per
 commit, whether a test noticed the change being taken out, and updates that same comment on later pushes. The
 rerun steps for each flagged commit are on the job's summary page.
+
+## Bite-proof badge
+
+When every change Bite checked had a test that noticed it, Bite ends with "Bite-proof. Nice work." and prints a
+badge line you can paste into your README:
+
+[![Bite-proof ✅](https://img.shields.io/badge/Bite--proof-%E2%9C%85-black)](https://github.com/connabyss/bite)
+
+Prefer a gentler wording for the warnings? `bite --roast` gives the same results, phrased differently.
 
 ## The catch that shows what it's for
 
