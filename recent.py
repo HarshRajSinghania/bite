@@ -110,7 +110,7 @@ def skip_reason(subject: str, said: str) -> str:
         names = {"win": "Windows", "mac": "macOS", "linux": "Linux"}
         return f"built for {'/'.join(sorted(names[o] for o in built_for))}, can't be checked on {names[HERE]}"
     if TIDY.search(subject):
-        return "a tidy-up (no behaviour change meant)"
+        return "a tidy-up, so there's nothing new to check"
     return ""
 
 
@@ -305,13 +305,27 @@ def undo_check(root: Path, c: dict, cfg) -> str:
             if c.get("skip"):
                 return f"not flagged: {c['skip']}"
             if c.get("test_code") and not tests_touch(root, c):
-                return "not flagged: its tests don't name the changed code (likely for other code)"
+                return "not flagged: its tests are about other code"
             if closed_since(root, c, cfg):
                 return "closed since: today's tests catch it"
             return "TEST GUARDS NOTHING" if c.get("test_code") else "unguarded"
+        c["caught"] = caught_by(undone["out"])
         return "guarded" if not bite.load_failure(undone["out"]) else "guarded (tests use the new code)"
     finally:
         shutil.rmtree(folder.parent, ignore_errors=True)
+
+
+# The names of failing tests, as pytest, unittest, go test, cargo test, jest and dotnet test print them.
+FAILED_TEST = re.compile(r"^(?:FAILED|ERROR) \S+::(?:\S+::)*([\w\[\]-]+)|^(?:FAIL|ERROR): (\w+) \(|--- FAIL: (\S+)|"
+                         r"^test (\S+) \.\.\. FAILED|✕ (.+?)(?: \(\d+ ?ms\))?$|^\s*Failed (\S+) \[", re.M)
+
+
+def caught_by(out: str) -> str:
+    """The test(s) that failed, for the report: "`test_x`", "`test_x` and 2 more", or "" when none is named."""
+    names = list(dict.fromkeys(next(g for g in m.groups() if g).strip() for m in FAILED_TEST.finditer(out)))
+    if not names:
+        return ""
+    return f"`{names[0]}`" + (f" and {len(names) - 1} more" if len(names) > 1 else "")
 
 
 def closed_since(root: Path, c: dict, cfg) -> bool:
@@ -334,6 +348,7 @@ def closed_since(root: Path, c: dict, cfg) -> bool:
             return False
         subprocess.run(["git", "apply", "-R", "-"], cwd=folder, input=diff, capture_output=True)
         undone = bite.run_tests(fcfg, folder)
+        c["caught"] = caught_by(undone["out"])
         return not undone["ok"] and not bite.load_failure(undone["out"])
     finally:
         shutil.rmtree(folder.parent, ignore_errors=True)
@@ -541,21 +556,49 @@ def save_log(root: Path, tried: list, cs: list) -> None:
         {k: c.get(k) for k in ("sha", "subject", "undo", "score")} for c in cs]}, indent=1), encoding="utf-8")
 
 
-def plain(undo: str) -> tuple[str, str]:
-    """The free check's result as (kind, words) for the report: kind is held, gap, odd, fail, none or skip."""
-    if undo.startswith(("guarded", "closed since")):
-        return "held", "Held: a test fails when this change is taken out"
-    if undo == "TEST GUARDS NOTHING":
-        return "odd", "Its own tests still pass without its code: they check nothing it changed"
-    if undo.startswith("unguarded"):
-        return "gap", "No test notices if this change is taken out"
-    if undo == "tests fail at this commit":
-        return "fail", "Couldn't check: the tests already fail at this commit"
-    if undo == "no tests ran at this commit":
-        return "none", "Couldn't check: no tests ran at this commit"
-    if undo.startswith("not flagged: "):
-        return "skip", "Skipped: " + undo[len("not flagged: "):]
-    return "skip", "Couldn't check: " + undo
+SETUP_LINK = "https://github.com/connabyss/bite/blob/main/AGENTS.md#setup-once-your-person-says-yes-they-only-paste-a-key-and-only-for-the-paid-step"
+
+
+def say(c: dict, newest: str = "") -> tuple[str, str, str]:
+    """One free-check result in plain words, the same in the terminal, the report, the job page and the pull request
+    comment: (kind, short label, one or two sentences). Each answers one question: if this change disappeared, would
+    any test notice? kind is held, gap, odd, fail, none or skip. newest is the pull request's newest commit: tests
+    failing on an older commit are skipped, since they often get fixed later."""
+    u, caught = c.get("undo", ""), c.get("caught", "")
+    one = caught and " more" not in caught
+    if u.startswith("closed since"):
+        return "held", "✅ a later test notices", f"✅ A test added in a later commit notices it now{f' ({caught})' if caught else ''}."
+    if u == "guarded (tests use the new code)":
+        return "held", "✅ tests crash without it", "✅ Without this change your tests crash, so they'd notice if it went."
+    if u.startswith("guarded"):
+        return ("held", f"✅ noticed by {caught.replace('`', '') or 'your tests'}",
+                f"✅ {(('The test ' if one else 'The tests ') + caught) if caught else 'Your tests'} noticed it was gone. "
+                f"If this change breaks later, "
+                f"{'that test' if one else 'they'} will warn you.")
+    if u.startswith("unguarded"):
+        return ("gap", "⚠️ NO TEST NOTICED", "⚠️ No test noticed it was gone. If it breaks later, nothing warns you. "
+                "**Next:** add a test that fails without it.")
+    if u == "TEST GUARDS NOTHING":
+        mine = ", ".join(f"`{t}`" for t in c.get("test_code", []))
+        return ("odd", "⚠️ ITS TESTS DIDN'T NOTICE", f"⚠️ This commit added tests{f' ({mine})' if mine else ''}, but they "
+                "didn't notice it was gone either, so they check something else. **Next:** make one fail without the change.")
+    if u == "tests fail at this commit":
+        if newest and c["sha"] != newest:
+            return ("skip", "➖ tests failed here, skipped", "➖ Your tests failed at this commit, so Bite skipped it "
+                    "(a later commit may have fixed them).")
+        return ("fail", "❌ tests already fail", "❌ Your tests already fail here, so Bite can't ask its question. "
+                "**Next:** fix them first.")
+    if u == "no tests ran at this commit":
+        return ("none", "⚠️ no tests found", "⚠️ Bite couldn't find any tests to run. **Next:** add one, or "
+                f"[point Bite at your tests]({SETUP_LINK}).")
+    if u.startswith("not flagged: "):
+        return "skip", "➖ skipped: " + u[len("not flagged: "):], "➖ Skipped: " + u[len("not flagged: "):] + "."
+    return "skip", "➖ couldn't check: " + u, "➖ Couldn't check: " + u + "."
+
+
+def flat(text: str) -> str:
+    """say()'s sentence without its Markdown, for the terminal and the report page."""
+    return re.sub(r"\[([^]]+)\]\([^)]+\)", r"\1", text).replace("**", "").replace("`", "")
 
 
 def commit_link(root: Path) -> str:
@@ -572,20 +615,20 @@ def write_html(root: Path, cs: list, tried: list, seconds: float) -> Path:
     e = html.escape
     link = commit_link(root)
     checked = [c for c in cs if c.get("undo")]
-    kinds = [plain(c["undo"])[0] for c in checked]
+    kinds = [say(c)[0] for c in checked]
     false_done = [r for r in tried if r.get("status") == "FALSE DONE"]
     sha = lambda x: (f'<a href="{e(link + x)}">{x[:8]}</a>' if link else x[:8])  # noqa: E731
     rows = "".join(f'<tr class="{k}"><td><code>{sha(c["sha"])}</code></td><td>{e(c["subject"][:90])}</td>'
-                   f'<td><span class="dot"></span>{e(w)}' + (f'<div class="why">{e(c["why"])}</div>' if c.get("why") else "")
-                   + "</td></tr>" for c in checked for k, w in [plain(c["undo"])])
+                   f'<td><span class="dot"></span>{e(flat(w)[2:].strip())}' + (f'<div class="why">{e(c["why"])}</div>' if c.get("why") else "")
+                   + "</td></tr>" for c in checked for k, _, w in [say(c)])
     claims = "".join(f'<tr class="{"odd" if r["status"] == "FALSE DONE" else "held" if r["status"] == "holds" else "skip"}">'
                      f'<td><code>{sha(r["sha"])}</code></td><td>{e(r["subject"][:90])}</td><td><span class="dot"></span>'
                      + (f'False "done": {e(r.get("bug", ""))} Today\'s code: {e(r.get("today", ""))}.'
                         if r["status"] == "FALSE DONE" else "The claim held" if r["status"] == "holds" else e(r["status"]))
                      + "</td></tr>" for r in tried)
-    tiles = [(len(checked), "commits checked", ""), (kinds.count("held"), "held", "held"),
-             (kinds.count("gap") + kinds.count("odd"), "no test guards them", "gap"),
-             (kinds.count("skip"), "couldn't check", "skip")]
+    tiles = [(len(checked), "commits checked", ""), (kinds.count("held"), "a test noticed", "held"),
+             (kinds.count("gap") + kinds.count("odd") + kinds.count("none"), "no test noticed", "gap"),
+             (kinds.count("skip") + kinds.count("fail"), "couldn't check", "skip")]
     if tried:
         tiles.append((len(false_done), f"false \"done\" of {len(tried)} claims tested", "odd"))
     page = f"""<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -601,7 +644,7 @@ main{{max-width:920px;margin:0 auto;padding:32px 16px}} h1{{margin:0;font-size:2
 .tile.odd b{{color:var(--odd)}} .tile.skip b{{color:var(--skip)}}
 table{{width:100%;border-collapse:collapse}} td{{padding:8px 6px;border-top:1px solid var(--line);vertical-align:top}}
 td:first-child{{white-space:nowrap}} .dot{{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px;background:var(--skip)}}
-.held .dot{{background:var(--held)}} .gap .dot{{background:var(--gap)}} .odd .dot{{background:var(--odd)}}
+.held .dot{{background:var(--held)}} .gap .dot,.none .dot{{background:var(--gap)}} .odd .dot,.fail .dot{{background:var(--odd)}}
 .why{{color:var(--mute);font-size:13px}} footer{{margin-top:32px;color:var(--mute);font-size:13px}}
 </style>
 <main>
@@ -609,7 +652,7 @@ td:first-child{{white-space:nowrap}} .dot{{display:inline-block;width:9px;height
 <div class="sub">{datetime.now():%Y-%m-%d %H:%M} &middot; did the recent "fixed" commits hold? &middot; {seconds:.0f}s, ${SPENT[0]:.2f}</div>
 <div class="tiles">{"".join(f'<div class="tile {k}"><b>{n}</b>{e(t)}</div>' for n, t, k in tiles)}</div>
 {f'<h2>Claims tested</h2><table>{claims}</table>' if tried else ""}
-<h2>Free check: does a test notice if each change is taken out?</h2>
+<h2>If this change disappeared, would any test notice?</h2>
 {f'<table>{rows}</table>' if rows else '<p class="sub">No commits were checked.</p>'}
 <footer>"Held" means a test fails when the change is taken out. It doesn't prove the commit has no other bugs.
 Details and rerun commands are in the other files in this folder. Made by <a href="https://github.com/connabyss/bite">Bite</a>.</footer>
@@ -622,73 +665,59 @@ Details and rerun commands are in the other files in this folder. Made by <a hre
 
 def write_comment(root: Path, cs: list, none: str = "", error: str = "", newest: str = "") -> Path:
     """The free check in plain words for a pull request comment (the GitHub Action posts it): a verdict, what to
-    do, then each commit in a collapsed list. none says why nothing was checked, error why Bite couldn't run, and
-    newest is the pull request's newest commit: only its failing tests decide the verdict (earlier commits often
-    fail and get fixed later)."""
+    do next, then one line per commit. none says why nothing was checked, error why Bite couldn't start, and newest
+    is the pull request's newest commit: only its failing tests decide the verdict."""
     import html
     link = commit_link(root)
-    words = {"held": "✅ A test fails without this change, so the tests really check it.",
-             "gap": "⚠️ The tests still pass without this change, so no test shows it works yet.",
-             "odd": "⚠️ This commit added tests, but they still pass without its code change, so they don't test it.",
-             "none": "⚠️ No tests ran at this commit, so nothing checks it.",
-             "fail": "❌ Your tests fail at this commit, so Bite couldn't check it.",
-             "fail_old": "➖ Your tests failed at this commit, so Bite skipped it (a later commit may have fixed them)."}
     checked = [c for c in cs if c.get("undo")]
-    kinds = [plain(c["undo"])[0] for c in checked]
-    kinds = ["fail_old" if k == "fail" and c["sha"] != newest else k for c, k in zip(checked, kinds)]
+    said = [say(c, newest) for c in checked]
+    kinds = [k for k, _, _ in said]
     bad = [c for c, k in zip(checked, kinds) if k in ("gap", "odd")]
     sha = lambda c: f"[`{c['sha'][:8]}`]({link}{c['sha']})" if link else f"`{c['sha'][:8]}`"  # noqa: E731
     why = lambda c: f" Why: {html.escape(c['why'], quote=False).replace('`', chr(39))}." if c.get("why") else ""  # noqa: E731
-    line = lambda c, k: (f"- {sha(c)} {html.escape(c['subject'][:70], quote=False)}: "  # noqa: E731
-                         + (words.get(k) or "➖ " + plain(c["undo"])[1] + ".") + (why(c) if k.startswith("fail") else ""))
+    # The verdict first; the commit's own title after it, quoted and small, so it doesn't read as Bite talking.
+    line = lambda c, k, w: (f"- {w}" + (why(c) if k == "fail" or "tests failed here" in w else "")  # noqa: E731
+                            + f"<br><sub>Commit {sha(c)}: “{html.escape(c['subject'][:70], quote=False)}”</sub>")
     lines = ["<!-- bite-check -->"]
     if error:
-        lines += ["### ❌ Bite couldn't run", "", html.escape(error, quote=False), "",
-                  "**What to do:** fix that, then push again. Bite checks again on every push."]
+        lines += ["### ❌ Bite couldn't start", "", html.escape(error, quote=False), "",
+                  "**Next:** fix that and push again. Bite checks again on every push."]
     elif "fail" in kinds:
-        lines += ["### ❌ Bite: your tests fail, so it can't check this pull request", "",
-                  "Your tests already fail on the newest commit, before Bite takes anything out.", "",
-                  "**What to do:** fix those first. Bite checks again on your next push."]
+        lines += ["### ❌ Bite: your tests already fail", "",
+                  "Bite can't ask its question while your tests fail on the newest commit.", "",
+                  "**Next:** fix them first. Bite checks again on your next push."]
     elif bad:
         one = len(bad) == 1
-        lines += [f"### ⚠️ Bite: {len(bad)} change{'' if one else 's'} worth a look", "",
-                  f"Your tests still pass with {'this change' if one else 'these changes'} taken out, so no test shows "
-                  f"{'it works' if one else 'they work'} yet. That's fine for a change that isn't meant to do anything new (a tidy-up, a "
-                  "rename, docs). Otherwise, nothing would notice if it broke later.", "",
-                  "**What to do:** if the change should do something, add a test that fails without it.", ""]
-        lines += [line(c, plain(c["undo"])[0]) for c in bad]
+        lines += [f"### ⚠️ Bite: no test noticed {len(bad)} change{'' if one else 's'}", "",
+                  f"Bite took {'the ⚠️ change' if one else 'each ⚠️ change'} below out and every test still passed. If "
+                  f"{'it' if one else 'they'} broke later, nothing would warn you. That's fine for a tidy-up, a rename or docs.", "",
+                  "**Next:** if the change should do something, add a test that fails without it."]
     elif "none" in kinds and "held" not in kinds:
-        lines += ["### ⚠️ Bite: no tests ran", "", "Your test command ran no tests, so nothing checks this code.", "",
-                  "**What to do:** add tests, or set test_command in .bite.ini to the command that runs them."]
+        lines += ["### ⚠️ Bite: no tests found", "", "Bite couldn't find any tests to run, so nothing would notice if this code broke.", "",
+                  f"**Next:** add a test, or [point Bite at your tests]({SETUP_LINK})."]
     elif "held" in kinds:
-        lines += ["### ✅ Bite: your tests really check the changes in this pull request", "",
-                  "Taking each change back out makes a test fail, so the tests would notice if it broke."]
+        lines += ["### ✅ Bite: a test noticed every change", "",
+                  "Bite took each change out, one at a time, and a test noticed every time. If one breaks later, that "
+                  "test will warn you."]
     elif checked:
-        lines += ["### ➖ Bite: nothing here it could check", "", "No change in this pull request could be tested this way."]
+        lines += ["### ➖ Bite: nothing here to check", "", "Bite skipped every commit here. Each one says why."]
     else:
-        lines += ["### ➖ Bite: nothing here it could check", "",
+        lines += ["### ➖ Bite: nothing here to check", "",
                   none or "No commit in this pull request changed code: only docs, settings or tests."]
+    if checked:
+        lines += [""] + [line(c, k, w) for c, (k, _, w) in zip(checked, said)]
     total, last = os.environ.get("BITE_PR_COMMITS", ""), os.environ.get("BITE_CHECKED_COMMITS", "")
     if total.isdigit() and last.isdigit() and int(total) > int(last) and not error:
         lines += ["", f"Bite looked at the newest {last} of this pull request's {total} commits."]
     # Every comment ends the same way: the fold, the same few words on how Bite checks, and the link.
-    lines += ["", f"<details><summary>{'Every commit, and how Bite checked' if checked else 'How Bite checks'}</summary>", ""]
-    lines += [line(c, k) for c, k in zip(checked, kinds)] + ([""] if checked else [])
-    lines += ["Bite takes each commit's code change back out and runs your tests. A test that really checks a change "
-              "fails when the change is gone. "
-              + ("The steps to rerun each check yourself are on the job's summary page. " if checked else "")
+    lines += ["", "<details><summary>How Bite checks</summary>", "",
+              "Bite asks one question about each change: if it disappeared, would any test notice? It takes the change "
+              "out, runs your tests, and puts it back. "
+              + ("The steps to rerun each check yourself are on the job's summary page. " if bad else "")
               + "[What is Bite?](https://github.com/connabyss/bite)", "", "</details>"]
     p = proof_dir(root) / "COMMENT.md"
     p.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return p
-
-
-def gap(c: dict) -> str:
-    """What the tests miss, in one plain line."""
-    if c.get("undo") == "TEST GUARDS NOTHING":
-        return (f"its own tests ({', '.join(c['test_code'])}) still pass with its code change taken out, so they "
-                "don't check what it changed.")
-    return "no test fails with its code change taken out, so nothing would notice if it broke or was lost."
 
 
 def undo_steps(root: Path, sha: str, files: list) -> list:
@@ -708,16 +737,16 @@ def undo_steps(root: Path, sha: str, files: list) -> list:
 
 def write_free(root: Path, cfg, flagged: list) -> Path:
     """The free pass's findings, each with a rerun recipe and a note to hand to the user's own Claude."""
-    lines = ["# Bite: changes no test checks", "",
-             "Found by taking each commit's code change back out (keeping its tests) and running the tests: they "
-             "still passed. Free; no model was used.", ""]
+    lines = ["# Bite: changes no test noticed", "",
+             "Bite took each change below out, kept the tests, and ran them. Every test still passed, so nothing would "
+             "warn you if the change broke. This check is free; no AI was used.", ""]
     for i, c in enumerate(flagged, 1):
         sha = c["sha"]
         steps = undo_steps(root, sha, c["code"])
-        lines += [f"## {i}. {sha[:8]} {c['subject']}", "", f"- What's missing: {gap(c)[0].upper() + gap(c)[1:]}",
+        lines += [f"## {i}. {sha[:8]} {c['subject']}", "", f"- What Bite saw: {say(c)[2][3:]}",
                   f"- Code it changed: {', '.join(c['code'])}", "", "Check it yourself (a throwaway copy; your checkout "
                   "isn't touched):", "", "```", f"git worktree add ../bite_check {sha}", "cd ../bite_check",
-                  *steps, f"{cfg.test_cmd}", "# the tests pass: nothing caught the change being undone",
+                  *steps, f"{cfg.test_cmd}", "# every test passes: no test noticed the change was gone",
                   f"cd {root.as_posix()}", "git worktree remove --force ../bite_check", "```", "", "Hand this to your Claude:", "", "```",
                   f"Commit {sha[:8]} (\"{c['subject']}\") changed {', '.join(c['code'])}. With that change undone, "
                   f"the tests still pass ({'its own tests: ' + ', '.join(c['test_code']) if c.get('test_code') else 'no test covers it'}). "
@@ -851,7 +880,7 @@ def main(argv=None):
             c["score"] += 2
         elif c["undo"] == "TEST GUARDS NOTHING":
             c["score"] += 3
-        print(f"  {c['sha'][:8]} {c['undo']:<26} {c['subject'][:70]}", flush=True)
+        print(f"  {c['sha'][:8]} {say(c)[1]:<28} {c['subject'][:70]}", flush=True)
         if c.get("why"):  # say what broke, so it's clear whether it's the project or the copy
             print(f"           why: {c['why']}", flush=True)
         save_log(root, kept, cs)
@@ -894,14 +923,14 @@ def main(argv=None):
         print(f"All {len(tried)} claims tested held up: " + "; ".join(f"{r['sha'][:8]} {r['status']}" for r in tried))
     flagged = [c for c in cs if c.get("undo") == "TEST GUARDS NOTHING" or c.get("undo", "").startswith("unguarded")]
     for c in flagged:
-        print(f"{c['undo'].upper()}: {c['sha'][:8]} \"{c['subject'][:70]}\": {gap(c)}")
+        print(f"{say(c)[1]}: {c['sha'][:8]} \"{c['subject'][:70]}\": {flat(say(c)[2])[2:].strip()}")
     checked = [c for c in cs if c.get("undo")]
     held = [c for c in checked if c["undo"].startswith(("guarded", "closed since"))]
-    print(f"\nChecked {len(checked)} commit(s): {len(held)} have tests that fail without their change (guarded), "
-          f"{len(flagged)} flagged, {len(checked) - len(held) - len(flagged)} couldn't be checked"
+    print(f"\nChecked {len(checked)} commit(s): a test noticed {len(held)}, no test noticed {len(flagged)}, "
+          f"{len(checked) - len(held) - len(flagged)} couldn't be checked or skipped"
           + (f"; {n_out} outside the tests' reach" if n_out else "") + ".")
     if flagged:
-        print(f"Each flagged commit, with a check you can rerun and a note for your Claude: {write_free(root, cfg, flagged)}")
+        print(f"Each change no test noticed, with a check you can rerun and a note for your Claude: {write_free(root, cfg, flagged)}")
     print(f"\n{time.time() - t0:.0f}s, ${SPENT[0]:.2f}")
     save_log(root, tried, cs)
     write_comment(root, cs, newest=newest)

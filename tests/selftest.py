@@ -119,7 +119,7 @@ check("--all takes every commit", len(recent.commits(root, 40, True)) == 4)
 
 rc, out = run(root, [], fake_worker())
 check("false done found", 'FALSE "DONE": commit' in out and "Fix clamp" in out)
-check("unguarded change reported", "unguarded" in out)
+check("unguarded change reported", "NO TEST NOTICED" in out)
 check("still broken today", "STILL BROKEN" in out)
 check("proof written", (root / "bite_proof" / "REPORT.md").is_file() and
       any(p.name.endswith("test_bite_claim.py") for p in (root / "bite_proof").iterdir()))
@@ -188,7 +188,7 @@ except KeyboardInterrupt:
 finally:
     os.chdir(cwd)
     recent.undo_check = real_undo
-check("free pass: the first result is shown before the run ends", "unguarded" in buf.flushed)
+check("free pass: the first result is shown before the run ends", "NO TEST NOTICED" in buf.flushed)
 log = root / "bite_proof" / "recent_log.json"
 check("free pass: stopped partway, the first result is saved",
       log.is_file() and any(c.get("undo") for c in recent.json.loads(log.read_text())["free"]))
@@ -221,7 +221,7 @@ root = make_repo()
 (root / "test_more.py").write_text("import unittest\n\nclass M(unittest.TestCase):\n    def test_ok(self):\n        pass\n")
 commit(root, "Add more tests, fix the header comment" + CLAUDE)
 rc, out = run(root, ["--free", "--last", "1"], fake_worker())
-check("a comment-only edit isn't checked as a code change", "TEST GUARDS NOTHING" not in out and "free check" not in out)
+check("a comment-only edit isn't checked as a code change", "ITS TESTS DIDN'T NOTICE" not in out and "free check" not in out)
 
 # A test that guards nothing: the commit's own new test still passes with its code change taken out.
 root = make_repo()
@@ -235,12 +235,12 @@ commit(root, "Double zero right away, for the scoreboard" + CLAUDE)
 commit(root, "Square, for the scoreboard" + CLAUDE)
 rc, out = run(root, ["--free", "--last", "2"], fake_worker())
 check("fake test: a commit's own test that passes without its code is reported, by name",
-      "TEST GUARDS NOTHING" in out and "test_double.py" in out and "No fix claims" in out)
+      "ITS TESTS DIDN'T NOTICE" in out and "test_double.py" in out and "No fix claims" in out)
 check("fake test: a commit whose test does fail without its code is not", "test_sq.py" not in out)
 rep = (root / "bite_proof" / "FREE_REPORT.md").read_text() if (root / "bite_proof" / "FREE_REPORT.md").is_file() else ""
 check("fake test: the report gives the commit, the gap, a rerun recipe and a note for their Claude",
-      "Double zero right away" in rep and "What's missing" in rep and "git worktree add" in rep
-      and "Hand this to your Claude" in rep and "Checked 2 commit(s): 1 have tests that fail" in out)
+      "Double zero right away" in rep and "What Bite saw" in rep and "git worktree add" in rep
+      and "Hand this to your Claude" in rep and "Checked 2 commit(s): a test noticed 1" in out)
 
 # A flagged commit that created a file: `git checkout <sha>^ -- <file>` has no such path to restore, so the
 # recipe has to delete it instead.
@@ -264,9 +264,9 @@ installed = Path(tempfile.mkdtemp())
 with patch.dict(os.environ, {"PYTHONPATH": str(installed)}):
     rc, out = run(inst_root, ["--free", "--last", "1"], fake_worker())
 check("installed copy: a module the commit created isn't loaded from the install instead (#28)",
-      "TEST GUARDS NOTHING" not in out and "guarded" in out)
+      "ITS TESTS DIDN'T NOTICE" not in out and "✅ tests crash without it" in out)
 rc, out = run(root, ["--free", "--last", "1"], fake_worker())
-check("a run that flags nothing says what it verified", "Checked 1 commit(s): 1 have tests that fail without their change" in out)
+check("a run that flags nothing says what it verified", "Checked 1 commit(s): a test noticed 1," in out)
 
 # Noise filters for TEST GUARDS NOTHING (from 7 noise flags on two real repos): another OS, a tidy-up, tests
 # written for other code, and a gap a later commit closed. Each would otherwise be flagged.
@@ -281,35 +281,35 @@ def weak_commit(subject, test_src=None):
 
 other_os = "macOS" if recent.HERE != "mac" else "Windows"
 rc, out = run(weak_commit(f"Double zero right away on {other_os}"), ["--free", "--last", "1"], fake_worker())
-check("noise: a change built for another OS isn't flagged", "TEST GUARDS NOTHING" not in out and "built for" in out)
+check("noise: a change built for another OS isn't flagged", "ITS TESTS DIDN'T NOTICE" not in out and "built for" in out)
 rc, out = run(weak_commit("chore(lint): tidy double"), ["--free", "--last", "1"], fake_worker())
-check("noise: a tidy-up isn't flagged", "TEST GUARDS NOTHING" not in out and "tidy-up" in out)
+check("noise: a tidy-up isn't flagged", "ITS TESTS DIDN'T NOTICE" not in out and "tidy-up" in out)
 rc, out = run(weak_commit("Refactor double into one line"), ["--free", "--last", "1"], fake_worker())
-check("noise: a refactor or rename without a \"refactor:\" prefix isn't flagged", "TEST GUARDS NOTHING" not in out and "tidy-up" in out)
+check("noise: a refactor or rename without a \"refactor:\" prefix isn't flagged", "ITS TESTS DIDN'T NOTICE" not in out and "tidy-up" in out)
 root = make_repo()
 (root / "calc.py").write_text('"""Small number helpers."""\n\n' + (root / "calc.py").read_text().replace(
     "def double(x):\n", 'def double(x):\n    """Twice x: handles negatives too."""\n'))
 commit(root, "Explain how double handles negatives" + CLAUDE)
 rc, out = run(root, ["--free", "--last", "1"], fake_worker())
-check("noise: a commit that only edits docstrings isn't flagged", "unguarded" not in out and "Nothing to check" in out)
+check("noise: a commit that only edits docstrings isn't flagged", "NO TEST NOTICED" not in out and "Nothing to check" in out)
 rc, out = run(weak_commit("Double zero right away", "import unittest\n\nclass D(unittest.TestCase):\n"
                           "    def test_text(self):\n        self.assertEqual('a'.upper(), 'A')\n"), ["--free", "--last", "1"], fake_worker())
-check("noise: tests that don't name the changed code aren't flagged", "TEST GUARDS NOTHING" not in out and "don't name" in out)
+check("noise: tests that don't name the changed code aren't flagged", "ITS TESTS DIDN'T NOTICE" not in out and "about other code" in out)
 root = weak_commit("Double zero right away")
 (root / "test_double_more.py").write_text("import unittest\nfrom calc import double\nimport inspect\n\nclass E(unittest.TestCase):\n"
                                           "    def test_shortcut(self):\n        self.assertIn('if x else 0', inspect.getsource(double))\n")
 commit(root, "Pin the zero shortcut (by a person)")
 rc, out = run(root, ["--free", "--last", "2"], fake_worker())
-check("noise: a gap a later commit closed isn't flagged", "TEST GUARDS NOTHING" not in out and "closed since" in out)
+check("noise: a gap a later commit closed isn't flagged", "ITS TESTS DIDN'T NOTICE" not in out and "a later test notices" in out)
 check("noise filters keep real catches: the plain weak test is still flagged",
-      "TEST GUARDS NOTHING" in run(weak_commit("Double zero right away"), ["--free", "--last", "1"], fake_worker())[1])
+      "ITS TESTS DIDN'T NOTICE" in run(weak_commit("Double zero right away"), ["--free", "--last", "1"], fake_worker())[1])
 
 # free_test_command: step 1 uses the faster command, step 2 still uses test_command.
 root = make_repo()
 (root / ".bite.ini").write_text(f"[kit]\ntest_command = {PY} -m unittest -q\nallowed_programs = {PY}\n"
                                 f"free_test_command = {PY} -c \"import sys; sys.exit(3)\"\n")
 rc, out = run(root, [], fake_worker())
-check("free_test_command: the free pass runs it", "tests fail at this commit" in out)
+check("free_test_command: the free pass runs it", "tests already fail" in out)
 check("free_test_command: the claim test still runs with the full command", 'FALSE "DONE"' in out)
 
 # When the tests fail on Bite's copy, it says what broke (e.g. a file the project makes only at install time).
@@ -422,11 +422,11 @@ commit(root, "Fix <b>neg</b> & friends" + CLAUDE)
 rc, out = run(root, ["--free"], fake_worker())
 page = (root / "bite_proof" / "report.html").read_text(encoding="utf-8") if rc == 0 else ""
 check("report: report.html is written and named at the end of a run", "report.html" in out and "<table>" in page)
-check("report: a commit nobody's test guards is shown as such", "No test notices if this change is taken out" in page)
+check("report: a commit nobody's test guards is shown as such", "No test noticed it was gone" in page)
 note = (root / "bite_proof" / "COMMENT.md").read_text(encoding="utf-8") if rc == 0 else ""
 check("comment: the pull request comment leads with a plain verdict and what to do",
-      note.startswith("<!-- bite-check -->\n### ⚠️ Bite: 2 changes worth a look") and "**What to do:**" in note
-      and "<details>" in note and "Fix &lt;b&gt;neg" in note)
+      note.startswith("<!-- bite-check -->\n### ⚠️ Bite: no test noticed 2 changes") and "**Next:**" in note
+      and "<details>" in note and "“Fix &lt;b&gt;neg" in note and "<sub>Commit `" in note)
 check("report: commit subjects are escaped, not run as HTML", "Fix &lt;b&gt;neg&lt;/b&gt; &amp; friends" in page)
 
 # Every kind of comment ends the same way: the fold with the same words on how Bite checks, then the link.
@@ -440,13 +440,13 @@ c2 = {"sha": "b" * 40, "subject": "two"}
 newest_fails = recent.write_comment(root, [dict(c1, undo="tests fail at this commit", why="NameError: x"),
                                            dict(c2, undo="guarded")], newest=c1["sha"]).read_text(encoding="utf-8")
 check("comment: tests failing on the newest commit lead with a red verdict and say fix them first",
-      "### ❌ Bite: your tests fail" in newest_fails and "fix those first" in newest_fails and "NameError: x" in newest_fails)
+      "### ❌ Bite: your tests already fail" in newest_fails and "fix them first" in newest_fails and "NameError: x" in newest_fails)
 older_fails = recent.write_comment(root, [dict(c1, undo="tests fail at this commit"), dict(c2, undo="guarded")],
                                    newest=c2["sha"]).read_text(encoding="utf-8")
 check("comment: tests that failed only on an older commit don't decide the verdict",
       "### ✅" in older_fails and "Bite skipped it" in older_fails and "❌" not in older_fails)
 notes["no tests ran"] = recent.write_comment(root, [dict(c1, undo="no tests ran at this commit")], newest=c1["sha"]).read_text(encoding="utf-8")
-check("comment: no tests ran is a warning, not a calm dash", "### ⚠️ Bite: no tests ran" in notes["no tests ran"])
+check("comment: no tests ran is a warning, not a calm dash", "### ⚠️ Bite: no tests found" in notes["no tests ran"])
 notes["tests fail"] = newest_fails
 check("comment: a commit set aside on purpose says skipped, not couldn't check",
       "Skipped: a tidy-up" in recent.write_comment(root, [dict(c1, undo="not flagged: a tidy-up (no behaviour change meant)")]).read_text(encoding="utf-8"))
@@ -458,16 +458,30 @@ broken = make_repo()
 rc, out = run(broken, ["--free"], fake_worker())
 notes["couldn't run"] = (broken / "bite_proof" / "COMMENT.md").read_text(encoding="utf-8") if (broken / "bite_proof" / "COMMENT.md").is_file() else ""
 check("comment: when Bite can't run, the comment says why instead of leaving the last one up",
-      rc == 1 and "### ❌ Bite couldn't run" in notes["couldn't run"] and "no_such_runner_bite" in notes["couldn't run"])
+      rc == 1 and "### ❌ Bite couldn't start" in notes["couldn't run"] and "no_such_runner_bite" in notes["couldn't run"])
 plain_root = make_repo()
 (plain_root / "calc.py").write_text((plain_root / "calc.py").read_text() + "\n\ndef cube(x):\n    return x ** 3\n")
 commit(plain_root, "Add cube" + CLAUDE)
 rc, out = run(plain_root, ["--free", "--last", "1"], fake_worker())
 check("comment: code with no fix claim says no claim to check, not that no code changed",
       "says it fixes something" in (plain_root / "bite_proof" / "COMMENT.md").read_text(encoding="utf-8"))
+# The comment names the test that caught each change, not just "a test" (CH: "a test" / "your tests" is vague).
+named = make_repo()
+(named / "calc.py").write_text((named / "calc.py").read_text().replace("    return x\n", "    return min(x, hi)\n", 1))
+(named / "test_high.py").write_text(CLAIM_TEST.replace("class C", "class H"))
+commit(named, "Fix clamp at the high end" + CLAUDE)
+rc, out = run(named, ["--free", "--last", "1"], fake_worker())
+named_note = (named / "bite_proof" / "COMMENT.md").read_text(encoding="utf-8") if rc == 0 else ""
+check("comment: a guarded commit names the test that failed without it",
+      "- ✅ The test `test_high` noticed it was gone. If this change breaks later, that test will warn you." in named_note)
+check("terminal: the same plain words, naming the test", "✅ noticed by test_high" in out)
+check("caught_by: reads failing test names from pytest, unittest, go and cargo output",
+      recent.caught_by("FAILED tests/t.py::TestA::test_one - assert 1 == 2\nFAILED tests/t.py::test_two\n") == "`test_one` and 1 more"
+      and recent.caught_by("FAIL: test_x (t.T.test_x)\n") == "`test_x`" and recent.caught_by("--- FAIL: TestGo (0.00s)") == "`TestGo`"
+      and recent.caught_by("test parse::empty ... FAILED") == "`parse::empty`" and recent.caught_by("all good") == "")
 rc, out = run(root, ["--free", "--last", "0"], fake_worker())
 notes["nothing in the pull request"] = (root / "bite_proof" / "COMMENT.md").read_text(encoding="utf-8") if rc == 0 else ""
-how = "Bite takes each commit's code change back out and runs your tests. A test that really checks a change fails when the change is gone."
+how = "Bite asks one question about each change: if it disappeared, would any test notice? It takes the change out, runs your tests, and puts it back."
 check("comment: every kind (worth a look, tests check it, couldn't check, no code) ends with the same words and link",
       all(n.startswith("<!-- bite-check -->\n### ") and how in n
           and n.endswith("[What is Bite?](https://github.com/connabyss/bite)\n\n</details>\n") for n in notes.values()))
