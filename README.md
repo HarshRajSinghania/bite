@@ -145,5 +145,6 @@ Thank you to Bite's first contributors:
 
 - [@snehaapratap](https://github.com/snehaapratap) made the setup error messages point to steps that exist ([#18](https://github.com/connabyss/bite/pull/18)).
 - [@gauravjangra3165](https://github.com/gauravjangra3165) added macOS to the tests ([#19](https://github.com/connabyss/bite/pull/19)).
+- [@bfs2021](https://github.com/bfs2021) made the "check it yourself" steps work for commits that add a new file ([#37](https://github.com/connabyss/bite/pull/37), fixing [#27](https://github.com/connabyss/bite/issues/27)).
 
 MIT licensed.
