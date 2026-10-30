@@ -4,6 +4,11 @@
 
 **Bite checks whether an AI coding agent's "fixed" is actually true.**
 
+> "Reverting the claimed fix and making the change prove itself under a real test is exactly the kind of check that
+> should exist for every "fixed" commit."
+>
+> — [Ivan Zdravkov](https://zdravkov.info), [on DEV](https://dev.to/izdravkov/comment/3jdej)
+
 When a commit says it fixed something, Bite writes one small test of that exact claim, runs it itself on the commit and on today's code, and shows the result only if a second, independent check agrees the test is fair. If the test fails, the "fixed" wasn't.
 
 ## Try it in a minute
