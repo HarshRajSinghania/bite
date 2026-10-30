@@ -6,21 +6,39 @@ When a commit says it fixed something, Bite writes one small test of that exact 
 
 ## Try it in a minute
 
+Install once with [pipx](https://pipx.pypa.io), which gives Bite its own space so there's no venv to set up or
+activate:
+
 ```
-git clone https://github.com/connabyss/bite && cd bite
-pip install -e .
-cd /path/to/your-repo && bite --free
+python -m pip install --user pipx
+python -m pipx ensurepath
 ```
 
-`bite --free` needs no key and costs nothing. It takes each recent change back out, runs your tests, and lists
-the changes no test guards, plus any new test that still passes without its commit's code (it tests nothing).
+Close the terminal window and open a new one, then:
 
-To test the claims themselves, `pip install -e .[paid]` and set `ANTHROPIC_API_KEY`, then run `bite`. Each claim
-costs about $0.13, and `--budget` caps the total ($1 by default). Bite needs an API key for this step and
-never uses a Claude login or plan (Anthropic's Agent SDK rule: https://code.claude.com/docs/en/agent-sdk/overview).
+```
+pipx install git+https://github.com/connabyss/bite
+cd /path/to/your-repo
+bite --free
+```
+
+`bite` now works in any terminal window. `bite --free` needs no key and costs nothing. It takes each recent
+change back out, runs your tests, and lists the changes no test guards, plus any new test that still passes
+without its commit's code (it tests nothing). If something it needs is missing, like git or pytest, it says
+so and gives you the line that installs it. To update Bite later: `pipx upgrade bite-check`.
+
+To test the claims themselves, add the paid step's one extra package and set `ANTHROPIC_API_KEY`, then run
+`bite`:
+
+```
+pipx inject bite-check claude-agent-sdk
+```
+
+Each claim costs about $0.13, and `--budget` caps the total ($1 by default). Bite needs an API key for this step and never uses a Claude login or plan
+(Anthropic's Agent SDK rule: https://code.claude.com/docs/en/agent-sdk/overview).
 
 Works with pytest, npm test, cargo test, go test and dotnet test. Settings and limits: [CLAUDE.md](CLAUDE.md),
-written so your own Claude can set Bite up for you. Bite's own tests: `pip install -e .[test]` then `python -m pytest`.
+written so your own Claude can set Bite up for you. To work on Bite itself: clone it, `pip install -e .[test]`, then `python -m pytest`.
 
 ## The catch that shows what it's for
 

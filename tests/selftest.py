@@ -366,6 +366,23 @@ for args, code in ((["--help"], 0), (["--fre"], 2), (["--budget"], 2), (["--last
     check(f"options: {' '.join(args)} exits {code} before any check runs",
           rc == code and "free check of" not in buf.getvalue())
 
+# First run: a missing test runner is named, with the fix, before any copy is made (not "exit 1" per commit).
+root = make_repo()
+(root / ".bite.ini").write_text(f"[kit]\ntest_command = {PY} -m pytest -q\nallowed_programs = {PY}\n")
+real_run = subprocess.run
+no_pytest = lambda a, *k, **kw: (subprocess.CompletedProcess(a, 1) if a[1:] == ["-c", "import pytest"]  # noqa: E731
+                                 else real_run(a, *k, **kw))
+with patch.object(recent.subprocess, "run", no_pytest):
+    rc, out = run(root, ["--free"], fake_worker())
+check("first run: pytest missing says so and gives the install line, before any check",
+      rc == 1 and "pytest isn't installed" in out and "-m pip install pytest" in out and "free check of" not in out)
+(root / ".bite.ini").write_text(f"[kit]\ntest_command = no-such-runner-xyz run\nallowed_programs = {PY}\n")
+rc, out = run(root, ["--free"], fake_worker())
+check("first run: a test command that isn't installed is named", rc == 1 and "can't find 'no-such-runner-xyz'" in out)
+with patch.object(recent.shutil, "which", lambda name: None if name == "git" else "x"):
+    rc, out = run(root, ["--free"], fake_worker())
+check("first run: no git says how to get it, no traceback", rc == 1 and "git isn't installed" in out)
+
 # Docs: the key rule is stated where a reader looks first.
 for doc in ("CLAUDE.md", "README.md"):
     t = (KIT / doc).read_text(encoding="utf-8")

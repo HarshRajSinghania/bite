@@ -39,8 +39,10 @@ repos had none: on well-kept code, Claude's claims mostly hold, and Bite stays q
 
 ## Setup (once your person says yes; they only paste a key, and only for the paid step)
 
-- Python 3.10+ and git. In a clone of this repo: `pip install -e .` gives the `bite` command; run it inside
-  their repo. `pip install -e .[paid]` adds claude-agent-sdk (only the paid step needs it).
+- Python 3.10+ and git. `pipx install git+https://github.com/connabyss/bite` gives the `bite` command (no venv
+  to activate); run it inside their repo. `pipx inject bite-check claude-agent-sdk` adds the paid step's
+  package. If they have no pipx: `python -m pip install --user pipx`, `python -m pipx ensurepath`, new window.
+  Bite checks for git and the test runner (e.g. pytest) first and prints the install line if one is missing.
 - Optional `.bite.ini` in their repo, first line `[kit]`, then `test_command = <their test command>` (Bite
   guesses pytest, npm test, cargo test, go test or dotnet test when it isn't set). `claim_command` runs one test
   file (`{file}`) if adding the file to test_command doesn't work for their runner. For dotnet test Bite runs
