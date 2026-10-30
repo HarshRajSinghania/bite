@@ -208,6 +208,9 @@ check("test_covers: a commit outside the tests' reach is listed, not checked",
 check("the test command's language: pytest is Python, npm test is JavaScript, make is unknown",
       [recent.repo.runs_language(c)[0] for c in (f"{PY} -m pytest -q", "npm test", "cargo test", "make test",
                                                   "npm test && pytest")] == ["Python", "JavaScript or TypeScript", "Rust", "", ""])
+check("JavaScript runners called by name are JavaScript too (tape, ava, uvu, and under nyc or c8 coverage)",
+      {recent.repo.runs_language(c)[0] for c in ("nyc tape 'test/**/*.js'", "tape test/*.js", "c8 ava", "uvu tests",
+                                                  "tap", "jasmine")} == {"JavaScript or TypeScript"})
 root = make_repo()
 (root / "app.ts").write_text("export const clampUi = (x: number) => Math.max(0, x);\n")
 commit(root, "Fix the slider so it never goes below zero" + CLAUDE)

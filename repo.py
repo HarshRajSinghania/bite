@@ -18,7 +18,8 @@ CODE_SUFFIXES = {".py", ".pyw", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".
 # notice a TypeScript change going, so taking one out and seeing pytest pass says nothing about it.
 RUNNERS = [("Python", {"pytest", "py.test", "python", "python3", "py", "tox", "nox", "unittest", "hatch"},
             {".py", ".pyw", ".pyx", ".pxd"}),
-           ("JavaScript or TypeScript", {"npm", "npx", "yarn", "pnpm", "node", "bun", "deno", "jest", "vitest", "mocha"},
+           ("JavaScript or TypeScript", {"npm", "npx", "yarn", "pnpm", "node", "bun", "deno", "jest", "vitest", "mocha",
+                                         "tape", "tap", "ava", "uvu", "jasmine", "nyc", "c8"},
             {".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".mts", ".cts", ".vue", ".svelte"}),
            ("Rust", {"cargo"}, {".rs"}),
            ("Go", {"go"}, {".go"}),
