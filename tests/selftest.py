@@ -426,7 +426,7 @@ check("report: a commit nobody's test guards is shown as such", "No test noticed
 note = (root / "bite_proof" / "COMMENT.md").read_text(encoding="utf-8") if rc == 0 else ""
 check("comment: the pull request comment leads with a plain verdict and what to do",
       note.startswith("<!-- bite-check -->\n### ⚠️ Bite: no test noticed 2 changes") and "**Next:**" in note
-      and "<details>" in note and "Fix &lt;b&gt;neg" in note)
+      and "<details>" in note and "“Fix &lt;b&gt;neg" in note and "<sub>Commit `" in note)
 check("report: commit subjects are escaped, not run as HTML", "Fix &lt;b&gt;neg&lt;/b&gt; &amp; friends" in page)
 
 # Every kind of comment ends the same way: the fold with the same words on how Bite checks, then the link.
@@ -473,7 +473,7 @@ commit(named, "Fix clamp at the high end" + CLAUDE)
 rc, out = run(named, ["--free", "--last", "1"], fake_worker())
 named_note = (named / "bite_proof" / "COMMENT.md").read_text(encoding="utf-8") if rc == 0 else ""
 check("comment: a guarded commit names the test that failed without it",
-      "✅ `test_high` noticed it was gone. If this change breaks later, that test will warn you." in named_note)
+      "- ✅ The test `test_high` noticed it was gone. If this change breaks later, that test will warn you." in named_note)
 check("terminal: the same plain words, naming the test", "✅ noticed by test_high" in out)
 check("caught_by: reads failing test names from pytest, unittest, go and cargo output",
       recent.caught_by("FAILED tests/t.py::TestA::test_one - assert 1 == 2\nFAILED tests/t.py::test_two\n") == "`test_one` and 1 more"

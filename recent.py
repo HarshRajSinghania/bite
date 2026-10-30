@@ -572,7 +572,8 @@ def say(c: dict, newest: str = "") -> tuple[str, str, str]:
         return "held", "✅ tests crash without it", "✅ Without this change your tests crash, so they'd notice if it went."
     if u.startswith("guarded"):
         return ("held", f"✅ noticed by {caught.replace('`', '') or 'your tests'}",
-                f"✅ {caught or 'Your tests'} noticed it was gone. If this change breaks later, "
+                f"✅ {(('The test ' if one else 'The tests ') + caught) if caught else 'Your tests'} noticed it was gone. "
+                f"If this change breaks later, "
                 f"{'that test' if one else 'they'} will warn you.")
     if u.startswith("unguarded"):
         return ("gap", "⚠️ NO TEST NOTICED", "⚠️ No test noticed it was gone. If it breaks later, nothing warns you. "
@@ -674,8 +675,9 @@ def write_comment(root: Path, cs: list, none: str = "", error: str = "", newest:
     bad = [c for c, k in zip(checked, kinds) if k in ("gap", "odd")]
     sha = lambda c: f"[`{c['sha'][:8]}`]({link}{c['sha']})" if link else f"`{c['sha'][:8]}`"  # noqa: E731
     why = lambda c: f" Why: {html.escape(c['why'], quote=False).replace('`', chr(39))}." if c.get("why") else ""  # noqa: E731
-    line = lambda c, k, w: (f"- {sha(c)} {html.escape(c['subject'][:70], quote=False)}: {w}"  # noqa: E731
-                            + (why(c) if k == "fail" or "tests failed here" in w else ""))
+    # The verdict first; the commit's own title after it, quoted and small, so it doesn't read as Bite talking.
+    line = lambda c, k, w: (f"- {w}" + (why(c) if k == "fail" or "tests failed here" in w else "")  # noqa: E731
+                            + f"<br><sub>Commit {sha(c)}: “{html.escape(c['subject'][:70], quote=False)}”</sub>")
     lines = ["<!-- bite-check -->"]
     if error:
         lines += ["### ❌ Bite couldn't start", "", html.escape(error, quote=False), "",
