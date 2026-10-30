@@ -9,6 +9,7 @@ Bite: did your coding agent's recent "done" commits really do what they said?
     bite --free-checks 10     how many commits step 1 checks (default 6)
     bite --again              test claims again even if an earlier run already tested them
     bite --all                same as plain bite (kept so older commands still work)
+    bite --roast              the same results, worded a little more gently
     (from a clone without installing: python recent.py, python recent.py --free, ...)
 
 Step 1 (free): for each commit that changed code, the change is taken back out and the tests are run. If they
@@ -71,6 +72,9 @@ TIDY = re.compile(r"^(chore|style|ci|refactor|build|docs?|tests?)(\([^)]*\))?!?:
 # dotnet test exits 0 when its --filter matches no test: that's a test that never ran, not a claim that holds.
 RAN_NOTHING = re.compile(r"No test matches the given testcase filter|No test is available in")
 DOTNET_FILTER = '--filter "FullyQualifiedName~BiteClaim"'
+ROAST = [False]  # --roast: the same results, worded a little more gently
+# Earned when every change Bite checked had a test that noticed it; a repo can show it in its README.
+BADGE = "[![Bite-proof ✅](https://img.shields.io/badge/Bite--proof-%E2%9C%85-black)](https://github.com/connabyss/bite)"
 
 
 def ran_nothing(cmd: str, out: str) -> bool:
@@ -576,12 +580,15 @@ def say(c: dict, newest: str = "") -> tuple[str, str, str]:
                 f"If this change breaks later, "
                 f"{'that test' if one else 'they'} will warn you.")
     if u.startswith("unguarded"):
-        return ("gap", "⚠️ NO TEST NOTICED", "⚠️ No test noticed it was gone. If it breaks later, nothing warns you. "
-                "**Next:** add a test that fails without it.")
+        return ("gap", "⚠️ NO TEST NOTICED", "⚠️ " + ("If this fix wandered off, nothing would notice. A test would. " if ROAST[0] else
+                "No test noticed it was gone. If it breaks later, nothing warns you. ")
+                + "**Next:** add a test that fails without it.")
     if u == "TEST GUARDS NOTHING":
         mine = ", ".join(f"`{t}`" for t in c.get("test_code", []))
-        return ("odd", "⚠️ ITS TESTS DIDN'T NOTICE", f"⚠️ This commit added tests{f' ({mine})' if mine else ''}, but they "
-                "didn't notice it was gone either, so they check something else. **Next:** make one fail without the change.")
+        return ("odd", "⚠️ ITS TESTS DIDN'T NOTICE", f"⚠️ {'These' if ROAST[0] else 'This commit added'} tests"
+                f"{f' ({mine})' if mine else ''}" + (" are looking the other way. " if ROAST[0] else
+                ", but they didn't notice it was gone either, so they check something else. ")
+                + "**Next:** make one fail without the change.")
     if u == "tests fail at this commit":
         if newest and c["sha"] != newest:
             return ("skip", "➖ tests failed here, skipped", "➖ Your tests failed at this commit, so Bite skipped it "
@@ -594,6 +601,11 @@ def say(c: dict, newest: str = "") -> tuple[str, str, str]:
     if u.startswith("not flagged: "):
         return "skip", "➖ skipped: " + u[len("not flagged: "):], "➖ Skipped: " + u[len("not flagged: "):] + "."
     return "skip", "➖ couldn't check: " + u, "➖ Couldn't check: " + u + "."
+
+
+def bite_proof(kinds: list, tried: list = ()) -> bool:
+    """Every change Bite checked had a test that noticed it (skipped ones aside), and no claim tested was false."""
+    return "held" in kinds and set(kinds) <= {"held", "skip"} and not any(r.get("status") == "FALSE DONE" for r in tried)
 
 
 def flat(text: str) -> str:
@@ -645,11 +657,13 @@ main{{max-width:920px;margin:0 auto;padding:32px 16px}} h1{{margin:0;font-size:2
 table{{width:100%;border-collapse:collapse}} td{{padding:8px 6px;border-top:1px solid var(--line);vertical-align:top}}
 td:first-child{{white-space:nowrap}} .dot{{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px;background:var(--skip)}}
 .held .dot{{background:var(--held)}} .gap .dot,.none .dot{{background:var(--gap)}} .odd .dot,.fail .dot{{background:var(--odd)}}
-.why{{color:var(--mute);font-size:13px}} footer{{margin-top:32px;color:var(--mute);font-size:13px}}
+.why{{color:var(--mute);font-size:13px}} .proof{{border:1px solid var(--held);border-radius:10px;padding:12px 14px}}
+.proof b{{color:var(--held)}} footer{{margin-top:32px;color:var(--mute);font-size:13px}}
 </style>
 <main>
 <h1>Bite report: {e(root.name)}</h1>
 <div class="sub">{datetime.now():%Y-%m-%d %H:%M} &middot; did the recent "fixed" commits hold? &middot; {seconds:.0f}s, ${SPENT[0]:.2f}</div>
+{f'<p class="proof"><b>Bite-proof. Nice work.</b> Every change Bite checked had a test that noticed it. Badge for your README:<br><code>{e(BADGE)}</code></p>' if bite_proof(kinds, tried) else ""}
 <div class="tiles">{"".join(f'<div class="tile {k}"><b>{n}</b>{e(t)}</div>' for n, t, k in tiles)}</div>
 {f'<h2>Claims tested</h2><table>{claims}</table>' if tried else ""}
 <h2>If this change disappeared, would any test notice?</h2>
@@ -702,9 +716,11 @@ def write_comment(root: Path, cs: list, none: str = "", error: str = "", newest:
         lines += ["### ⚠️ Bite: no tests found", "", "Bite couldn't find any tests to run, so nothing would notice if this code broke.", "",
                   f"**Next:** add a test, or [point Bite at your tests]({SETUP_LINK})."]
     elif "held" in kinds:
-        lines += ["### ✅ Bite: a test noticed every change", "",
+        lines += ["### ✅ Bite-proof. Nice work." if bite_proof(kinds) else "### ✅ Bite: a test noticed every change", "",
                   "Bite took each change out, one at a time, and a test noticed every time. If one breaks later, that "
                   "test will warn you."]
+        if bite_proof(kinds):
+            lines += ["", f"Badge for your README: `{BADGE}`"]
     elif checked:
         lines += ["### ➖ Bite: nothing here to check", "", "Bite skipped every commit here. Each one says why."]
     else:
@@ -778,7 +794,7 @@ def write_proof(root: Path, found: list) -> Path:
     return d
 
 # Every option main() accepts; each one must be in the help text above (the self-test checks).
-FLAGS = {"--free", "--all", "--any", "--serious", "--again"}
+FLAGS = {"--free", "--all", "--any", "--serious", "--again", "--roast"}
 VALUED = {"--last": int, "--free-checks": int, "--suspects": int, "--budget": float}
 
 
@@ -804,6 +820,7 @@ def main(argv=None):
             print(f"Bite: unknown option {argv[i]!r}. Run bite --help for the options.")
             return 2
     opt = lambda k, d: type(d)(argv[argv.index(k) + 1]) if k in argv else d  # noqa: E731
+    ROAST[0] = "--roast" in argv
     if not shutil.which("git"):
         print("Bite: git isn't installed (or isn't on PATH). Install it from https://git-scm.com, "
               "then open a new terminal window.")
@@ -945,6 +962,9 @@ def main(argv=None):
     print(f"\nChecked {len(checked)} commit(s): a test noticed {len(held)}, no test noticed {len(flagged)}, "
           f"{len(checked) - len(held) - len(flagged)} couldn't be checked or skipped"
           + (f"; {n_out} outside the tests' reach" if n_out else "") + ".")
+    if bite_proof([say(c)[0] for c in checked], tried):
+        print(f"\nBite-proof. Nice work. Every change Bite checked had a test that noticed it.\n"
+              f"Badge for your README: {BADGE}")
     if flagged:
         print(f"Each change no test noticed, with a check you can rerun and a note for your coding AI: {write_free(root, cfg, flagged)}")
     print(f"\n{time.time() - t0:.0f}s, ${SPENT[0]:.2f}")
