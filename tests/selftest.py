@@ -241,6 +241,17 @@ rep = (root / "bite_proof" / "FREE_REPORT.md").read_text() if (root / "bite_proo
 check("fake test: the report gives the commit, the gap, a rerun recipe and a note for their Claude",
       "Double zero right away" in rep and "What's missing" in rep and "git worktree add" in rep
       and "Hand this to your Claude" in rep and "Checked 2 commit(s): 1 have tests that fail" in out)
+
+# A flagged commit that created a file: `git checkout <sha>^ -- <file>` has no such path to restore, so the
+# recipe has to delete it instead.
+fresh_root = make_repo()
+(fresh_root / "fresh.py").write_text("def triple(x):\n    return 3 * x\n")
+commit(fresh_root, "Fix the scoreboard triple" + CLAUDE)
+run(fresh_root, ["--free", "--last", "1"], fake_worker())
+fresh_rep = (fresh_root / "bite_proof" / "FREE_REPORT.md").read_text()
+checkout_lines = [ln for ln in fresh_rep.splitlines() if "git checkout" in ln]
+check("free report: a file the commit created is deleted, not put in the git checkout line",
+      "rm -f fresh.py" in fresh_rep and not any("fresh.py" in ln for ln in checkout_lines))
 rc, out = run(root, ["--free", "--last", "1"], fake_worker())
 check("a run that flags nothing says what it verified", "Checked 1 commit(s): 1 have tests that fail without their change" in out)
 
