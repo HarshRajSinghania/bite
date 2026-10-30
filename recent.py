@@ -6,6 +6,9 @@ Bite: did your coding agent's recent "done" commits really do what they said?
     bite --last 80 --suspects 3 --budget 1.00
     bite --serious            only fix claims about data, money, logins, security, crashes or leaks
     bite --any                check commits even when none of them claims a fix
+    bite --free-checks 10     how many commits step 1 checks (default 6)
+    bite --again              test claims again even if an earlier run already tested them
+    bite --all                same as plain bite (kept so older commands still work)
     (from a clone without installing: python recent.py, python recent.py --free, ...)
 
 Step 1 (free): for each commit that changed code, the change is taken back out and the tests are run. If they
@@ -767,18 +770,28 @@ def write_proof(root: Path, found: list) -> Path:
     (d / "REPORT.md").write_text("\n".join(lines), encoding="utf-8")
     return d
 
+# Every option main() accepts; each one must be in the help text above (the self-test checks).
+FLAGS = {"--free", "--all", "--any", "--serious", "--again"}
+VALUED = {"--last": int, "--free-checks": int, "--suspects": int, "--budget": float}
+
 
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     if "-h" in argv or "--help" in argv:
         print(__doc__.strip())
         return 0
-    flags, valued = {"--free", "--all", "--any", "--serious", "--again"}, {"--last", "--free-checks", "--budget", "--suspects"}
     i = 0
     while i < len(argv):  # a typo must not fall through to the paid step
-        if argv[i] in valued and i + 1 < len(argv):
+        if argv[i] in VALUED and i + 1 < len(argv):
+            kind = VALUED[argv[i]]
+            try:
+                kind(argv[i + 1])
+            except ValueError:
+                need = "a whole number" if kind is int else "a number"
+                print(f"Bite: {argv[i]} needs {need}, got {argv[i + 1]!r}.")
+                return 2
             i += 2
-        elif argv[i] in flags:
+        elif argv[i] in FLAGS:
             i += 1
         else:
             print(f"Bite: unknown option {argv[i]!r}. Run bite --help for the options.")

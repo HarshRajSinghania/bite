@@ -389,12 +389,20 @@ check("LFS: a file that can't be fetched stays a pointer and Bite says so",
       (copy / "gone.png").read_bytes() == ptr.replace(oid.encode(), b"0" * 64) and "Git LFS" in buf.getvalue())
 
 # Options: a typo or --help must never fall through to the paid step.
-for args, code in ((["--help"], 0), (["--fre"], 2), (["--budget"], 2), (["--last", "5", "--bogus"], 2)):
+for args, code in ((["--help"], 0), (["--fre"], 2), (["--budget"], 2), (["--last", "5", "--bogus"], 2),
+                   (["--last", "abc"], 2), (["--free-checks", "2.5"], 2), (["--suspects", "x"], 2),
+                   (["--budget", "lots"], 2)):
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
         rc = recent.main(args)
     check(f"options: {' '.join(args)} exits {code} before any check runs",
-          rc == code and "free check of" not in buf.getvalue())
+          rc == code and "free check of" not in buf.getvalue() and "Traceback" not in buf.getvalue())
+buf = io.StringIO()
+with contextlib.redirect_stdout(buf):
+    recent.main(["--last", "abc"])
+check("options: a non-number value gets a one-line message", buf.getvalue().strip() == "Bite: --last needs a whole number, got 'abc'.")
+missing = [o for o in sorted(recent.FLAGS | set(recent.VALUED)) if o not in recent.__doc__]
+check(f"options: --help lists every option main() accepts (missing: {missing})", not missing)
 
 # First run: a missing test runner is named, with the fix, before any copy is made (not "exit 1" per commit).
 root = make_repo()
