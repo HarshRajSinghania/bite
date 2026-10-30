@@ -204,6 +204,31 @@ rc, out = run(root, ["--free"], fake_worker())
 check("test_covers: a commit outside the tests' reach is listed, not checked",
       "outside the tests' reach" in out and "the panel colour" not in out and "Fix clamp" in out)
 
+# A test runner only notices its own language: pytest passing with a TypeScript change taken out says nothing.
+check("the test command's language: pytest is Python, npm test is JavaScript, make is unknown",
+      [recent.repo.runs_language(c)[0] for c in (f"{PY} -m pytest -q", "npm test", "cargo test", "make test",
+                                                  "npm test && pytest")] == ["Python", "JavaScript or TypeScript", "Rust", "", ""])
+root = make_repo()
+(root / "app.ts").write_text("export const clampUi = (x: number) => Math.max(0, x);\n")
+commit(root, "Fix the slider so it never goes below zero" + CLAUDE)
+rc, out = run(root, ["--free"], fake_worker())
+check("a TypeScript-only fix under Python tests is listed as code the tests can't run, not flagged",
+      "1 changed only code your tests can't run (they run Python)" in out and "never goes below zero" not in out
+      and "Fix clamp" in out)
+(root / "app.ts").write_text("export const clampUi = (x: number) => Math.min(9, Math.max(0, x));\n")
+(root / "calc.py").write_text((root / "calc.py").read_text() + "\n\ndef half(x):\n    return x / 2\n")
+commit(root, "Fix the slider top end and add half" + CLAUDE)
+c = {"sha": recent.repo.git(root, "rev-parse", "HEAD"), "subject": "Fix the slider top end and add half", "body": ""}
+recent.files_of(root, c, recent.repo.load_cfg(root))
+check("a commit changing Python and TypeScript takes out only the Python part",
+      c["code"] == ["calc.py"] and c["other_lang"] == ["app.ts"])
+root = make_repo()
+(root / "app.ts").write_text("export const clampUi = (x: number) => Math.max(0, x);\n")
+commit(root, "Fix the slider so it never goes below zero" + CLAUDE)
+rc, out = run(root, ["--free", "--last", "1"], fake_worker())
+check("only TypeScript changed: the comment says the Python tests can't notice it, not 'no code changed'",
+      "isn't Python, and your tests only run Python" in (root / "bite_proof" / "COMMENT.md").read_text(encoding="utf-8"))
+
 # No commit claims a fix: say so and stop, rather than spend checks on commits that promise nothing.
 root = make_repo()
 (root / "calc.py").write_text((root / "calc.py").read_text() + "\n\ndef triple(x):\n    return 3 * x\n")

@@ -14,6 +14,15 @@ CODE_SUFFIXES = {".py", ".pyw", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".
                  ".java", ".kt", ".kts", ".scala", ".c", ".h", ".cc", ".cpp", ".cxx", ".hpp", ".hh", ".cs", ".fs",
                  ".php", ".swift", ".m", ".mm", ".gd", ".lua", ".ex", ".exs", ".erl", ".clj", ".dart", ".vue",
                  ".svelte", ".r", ".jl", ".zig", ".nim", ".ml", ".hs", ".pl", ".pm"}
+# What each kind of test runner can exercise. A runner only notices changes in its own language: pytest can't
+# notice a TypeScript change going, so taking one out and seeing pytest pass says nothing about it.
+RUNNERS = [("Python", {"pytest", "py.test", "python", "python3", "py", "tox", "nox", "unittest", "hatch"},
+            {".py", ".pyw", ".pyx", ".pxd"}),
+           ("JavaScript or TypeScript", {"npm", "npx", "yarn", "pnpm", "node", "bun", "deno", "jest", "vitest", "mocha"},
+            {".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".mts", ".cts", ".vue", ".svelte"}),
+           ("Rust", {"cargo"}, {".rs"}),
+           ("Go", {"go"}, {".go"}),
+           (".NET", {"dotnet"}, {".cs", ".fs"})]
 COPY_IGNORE = [".git", "__pycache__", "node_modules", ".venv", "venv", ".tox", ".nox", ".mypy_cache",
                ".pytest_cache", ".ruff_cache", ".hypothesis"]
 class ConfigError(Exception):
@@ -71,6 +80,15 @@ def is_setup(rel: str, cfg) -> bool:
     name = rel.rsplit("/", 1)[-1]
     return name in cfg.test_cmd or any(fnmatch.fnmatch(rel.lower(), g.lower()) or fnmatch.fnmatch(name.lower(), g.lower())
                                        for g in cfg.test_setup)
+
+
+def runs_language(cmd: str) -> tuple[str, set]:
+    """The language a test command runs and its file endings, or ("", set()) when it isn't plainly one runner
+    (make, a script, Unity, or a mix): then Bite can't tell, and every code change is checked."""
+    words = {re.sub(r"(?i)(\.exe|[\d.]+)$", "", w.rsplit("/", 1)[-1].rsplit("\\", 1)[-1].lower())
+             for w in re.split(r"[\s\"'&|;()]+", cmd) if w}
+    hits = [(lang, sufs) for lang, names, sufs in RUNNERS if words & names]
+    return hits[0] if len(hits) == 1 else ("", set())
 
 
 # ---- the check -----------------------------------------------------------------

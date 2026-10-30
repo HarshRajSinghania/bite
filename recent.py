@@ -27,8 +27,9 @@ failing test plus the command that runs it.
 Settings: .bite.ini in the repo (optional; first line [kit], then test_command = ...). claim_command runs one
 test file ({file}); without it Bite adds the file to test_command (for dotnet test it adds a --filter instead).
 test_covers = the paths the test command can reach (globs, comma-separated, e.g. Assets/Sim/*, tests/*): commits
-that touch none of them are listed as outside the tests' reach, not checked. free_test_command = a faster subset
-of the tests for step 1 (step 2 still uses test_command).
+that touch none of them are listed as outside the tests' reach, not checked. Code in a language the test command
+doesn't run (TypeScript under pytest) is listed as code the tests can't run, not checked. free_test_command = a
+faster subset of the tests for step 1 (step 2 still uses test_command).
 
 Step 2 runs on Anthropic's Agent SDK, so it needs an Anthropic API key and never uses a Claude login or plan:
 Anthropic's rules for tools built on the Agent SDK (https://code.claude.com/docs/en/agent-sdk/overview) say they
@@ -241,6 +242,10 @@ def files_of(root: Path, c: dict, cfg) -> None:
     c["tests"] = [n for n in names if bite.is_test_file(n, cfg)]
     c["code"] = [n for n in names if n not in c["tests"] and Path(n).suffix.lower() in repo.CODE_SUFFIXES
                  and not repo.is_setup(n, cfg) and not comment_only(root, c["sha"], n)]
+    # Code in a language the test command doesn't run can't fail a test: taking it out says nothing about it.
+    runs = repo.runs_language(cfg.test_cmd)[1]
+    c["other_lang"] = [n for n in c["code"] if runs and Path(n).suffix.lower() not in runs]
+    c["code"] = [n for n in c["code"] if n not in c["other_lang"]]
     stat = repo.git(root, "diff", "--shortstat", f"{c['sha']}^", c["sha"], "--", *c["code"]) if c["code"] else ""
     c["lines"] = sum(int(x) for x in re.findall(r"(\d+) (?:insertion|deletion)", stat or ""))
     claims = bool(CLAIM.search(c["subject"])) and not NOT_CODE.search(c["subject"])
@@ -932,12 +937,18 @@ def main(argv=None):
     cs = commits(root, opt("--last", 40), since)  # --all is still accepted: every commit is the default now
     for c in cs:
         files_of(root, c, cfg)
+    other = [c for c in cs if c["other_lang"] and not c["code"]]
     cs = [c for c in cs if c["code"]]
     newest = cs[0]["sha"] if cs else ""  # git log lists the newest first
     print(f"Bite: {len(cs)} commits changed code in the last {opt('--last', 40)}.", flush=True)
+    lang = repo.runs_language(cfg.test_cmd)[0]
+    if other:
+        print(f"  {len(other)} changed only code your tests can't run (they run {lang}), not checked: "
+              + ", ".join(c["sha"][:8] for c in other), flush=True)
     if not cs:
         print("Nothing to check. Try a larger --last.")
-        write_comment(root, [])
+        write_comment(root, [], none=f"The code changed here isn't {lang}, and your tests only run {lang}, so they "
+                                     "can't notice it." if other else "")
         return 0
     n_out = 0
     if covers:  # a change the test command can't reach can't fail a test: that says nothing about the change
@@ -1031,7 +1042,8 @@ def main(argv=None):
     held = [c for c in checked if c["undo"].startswith(("guarded", "closed since"))]
     print(f"\nChecked {len(checked)} commit(s): a test noticed {len(held)}, no test noticed {len(flagged)}, "
           f"{len(checked) - len(held) - len(flagged)} couldn't be checked or skipped"
-          + (f"; {n_out} outside the tests' reach" if n_out else "") + ".")
+          + (f"; {n_out} outside the tests' reach" if n_out else "")
+          + (f"; {len(other)} in code your tests can't run" if other else "") + ".")
     if bite_proof([say(c)[0] for c in checked], tried):
         print(f"\nBite-proof. Nice work. Every change Bite checked had a test that noticed it.\n"
               f"Badge for your README: {BADGE}")
