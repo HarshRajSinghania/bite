@@ -252,6 +252,19 @@ fresh_rep = (fresh_root / "bite_proof" / "FREE_REPORT.md").read_text()
 checkout_lines = [ln for ln in fresh_rep.splitlines() if "git checkout" in ln]
 check("free report: a file the commit created is deleted, not put in the git checkout line",
       "rm -f fresh.py" in fresh_rep and not any("fresh.py" in ln for ln in checkout_lines))
+# A commit that created a module, in a project that's also pip-installed (#28): with the module deleted from Bite's
+# copy, Python would import the installed one and the commit's own test would pass. PYTHONPATH stands in for the install.
+inst_root = make_repo()
+(inst_root / "fresh.py").write_text("def triple(x):\n    return 3 * x\n")
+(inst_root / "test_fresh.py").write_text("import unittest\nfrom fresh import triple\n\nclass F(unittest.TestCase):\n"
+                                         "    def test_two(self):\n        self.assertEqual(triple(2), 6)\n")
+commit(inst_root, "Fix the scoreboard triple" + CLAUDE)
+installed = Path(tempfile.mkdtemp())
+(installed / "fresh.py").write_text((inst_root / "fresh.py").read_text())
+with patch.dict(os.environ, {"PYTHONPATH": str(installed)}):
+    rc, out = run(inst_root, ["--free", "--last", "1"], fake_worker())
+check("installed copy: a module the commit created isn't loaded from the install instead (#28)",
+      "TEST GUARDS NOTHING" not in out and "guarded" in out)
 rc, out = run(root, ["--free", "--last", "1"], fake_worker())
 check("a run that flags nothing says what it verified", "Checked 1 commit(s): 1 have tests that fail without their change" in out)
 
@@ -271,6 +284,14 @@ rc, out = run(weak_commit(f"Double zero right away on {other_os}"), ["--free", "
 check("noise: a change built for another OS isn't flagged", "TEST GUARDS NOTHING" not in out and "built for" in out)
 rc, out = run(weak_commit("chore(lint): tidy double"), ["--free", "--last", "1"], fake_worker())
 check("noise: a tidy-up isn't flagged", "TEST GUARDS NOTHING" not in out and "tidy-up" in out)
+rc, out = run(weak_commit("Refactor double into one line"), ["--free", "--last", "1"], fake_worker())
+check("noise: a refactor or rename without a \"refactor:\" prefix isn't flagged", "TEST GUARDS NOTHING" not in out and "tidy-up" in out)
+root = make_repo()
+(root / "calc.py").write_text('"""Small number helpers."""\n\n' + (root / "calc.py").read_text().replace(
+    "def double(x):\n", 'def double(x):\n    """Twice x: handles negatives too."""\n'))
+commit(root, "Explain how double handles negatives" + CLAUDE)
+rc, out = run(root, ["--free", "--last", "1"], fake_worker())
+check("noise: a commit that only edits docstrings isn't flagged", "unguarded" not in out and "Nothing to check" in out)
 rc, out = run(weak_commit("Double zero right away", "import unittest\n\nclass D(unittest.TestCase):\n"
                           "    def test_text(self):\n        self.assertEqual('a'.upper(), 'A')\n"), ["--free", "--last", "1"], fake_worker())
 check("noise: tests that don't name the changed code aren't flagged", "TEST GUARDS NOTHING" not in out and "don't name" in out)
@@ -414,6 +435,36 @@ notes = {"worth a look": note}
 for name, cs in (("tests check it", [dict(c1, undo="guarded")]), ("couldn't check", [dict(c1, undo="tests fail at this commit")]),
                  ("no code", [])):
     notes[name] = recent.write_comment(root, cs).read_text(encoding="utf-8")
+# Each situation gets its own verdict (PR #41: red tests got a calm "nothing here it could check").
+c2 = {"sha": "b" * 40, "subject": "two"}
+newest_fails = recent.write_comment(root, [dict(c1, undo="tests fail at this commit", why="NameError: x"),
+                                           dict(c2, undo="guarded")], newest=c1["sha"]).read_text(encoding="utf-8")
+check("comment: tests failing on the newest commit lead with a red verdict and say fix them first",
+      "### ❌ Bite: your tests fail" in newest_fails and "fix those first" in newest_fails and "NameError: x" in newest_fails)
+older_fails = recent.write_comment(root, [dict(c1, undo="tests fail at this commit"), dict(c2, undo="guarded")],
+                                   newest=c2["sha"]).read_text(encoding="utf-8")
+check("comment: tests that failed only on an older commit don't decide the verdict",
+      "### ✅" in older_fails and "Bite skipped it" in older_fails and "❌" not in older_fails)
+notes["no tests ran"] = recent.write_comment(root, [dict(c1, undo="no tests ran at this commit")], newest=c1["sha"]).read_text(encoding="utf-8")
+check("comment: no tests ran is a warning, not a calm dash", "### ⚠️ Bite: no tests ran" in notes["no tests ran"])
+notes["tests fail"] = newest_fails
+check("comment: a commit set aside on purpose says skipped, not couldn't check",
+      "Skipped: a tidy-up" in recent.write_comment(root, [dict(c1, undo="not flagged: a tidy-up (no behaviour change meant)")]).read_text(encoding="utf-8"))
+with patch.dict(os.environ, {"BITE_PR_COMMITS": "34", "BITE_CHECKED_COMMITS": "20"}):
+    big = recent.write_comment(root, [dict(c1, undo="guarded")]).read_text(encoding="utf-8")
+check("comment: a pull request with more commits than were checked says so", "newest 20 of this pull request's 34 commits" in big)
+broken = make_repo()
+(broken / ".bite.ini").write_text("[kit]\ntest_command = no_such_runner_bite run\n")
+rc, out = run(broken, ["--free"], fake_worker())
+notes["couldn't run"] = (broken / "bite_proof" / "COMMENT.md").read_text(encoding="utf-8") if (broken / "bite_proof" / "COMMENT.md").is_file() else ""
+check("comment: when Bite can't run, the comment says why instead of leaving the last one up",
+      rc == 1 and "### ❌ Bite couldn't run" in notes["couldn't run"] and "no_such_runner_bite" in notes["couldn't run"])
+plain_root = make_repo()
+(plain_root / "calc.py").write_text((plain_root / "calc.py").read_text() + "\n\ndef cube(x):\n    return x ** 3\n")
+commit(plain_root, "Add cube" + CLAUDE)
+rc, out = run(plain_root, ["--free", "--last", "1"], fake_worker())
+check("comment: code with no fix claim says no claim to check, not that no code changed",
+      "says it fixes something" in (plain_root / "bite_proof" / "COMMENT.md").read_text(encoding="utf-8"))
 rc, out = run(root, ["--free", "--last", "0"], fake_worker())
 notes["nothing in the pull request"] = (root / "bite_proof" / "COMMENT.md").read_text(encoding="utf-8") if rc == 0 else ""
 how = "Bite takes each commit's code change back out and runs your tests. A test that really checks a change fails when the change is gone."

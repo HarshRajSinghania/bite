@@ -59,12 +59,15 @@ runs:
           exit 1
         fi
         n=$(git rev-list --count --no-merges "$BASE..HEAD")
+        export BITE_PR_COMMITS=$n  # so the comment can say when only the newest ones were checked
         [ "$n" -gt "$MAX" ] && n=$MAX
+        export BITE_CHECKED_COMMITS=$n
         echo "This pull request has $n commit(s) to check."
         rm -f bite_proof/FREE_REPORT.md bite_proof/COMMENT.md
         rc=0
         bite --free --last "$n" --free-checks "$n" $ARGS || rc=$?
         if [ "$rc" -ne 0 ]; then
+          post_comment  # says why Bite couldn't run, so last push's comment doesn't stay up
           exit "$rc"
         fi
         post_comment
