@@ -63,7 +63,7 @@ jobs:
       # install what your tests need here, e.g. for Python:
       - uses: actions/setup-python@v5
       - run: python -m pip install pytest -r requirements.txt
-      - uses: connabyss/bite@main
+      - uses: connabyss/bite@v0.2.0
 ```
 
 Options go under `with:`: `args` (extra `bite` options, default `--all`, which checks every commit, not only
