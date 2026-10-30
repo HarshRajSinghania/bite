@@ -3,6 +3,7 @@ Bite: did your coding agent's recent "done" commits really do what they said?
 
     bite                      check the last 40 commits (step 2 needs an API key)
     bite --free               step 1 only: no key, no cost
+    bite --demo               try it on a tiny made-up project first (free, about 30 seconds)
     bite --last 80 --suspects 3 --budget 1.00
     bite --serious            only fix claims about data, money, logins, security, crashes or leaks
     bite --any                check commits even when none of them claims a fix
@@ -863,8 +864,66 @@ def write_proof(root: Path, found: list) -> Path:
     (d / "REPORT.md").write_text("\n".join(lines), encoding="utf-8")
     return d
 
+# ---- the demo ------------------------------------------------------------------
+
+# bite --demo: a made-up shop with two commits that say they fixed something. One added a test for its fix, the
+# other didn't, so the free pass shows one change a test notices and one it doesn't.
+DEMO_STEPS = [
+    ("Start a tiny shop", {
+        "shop.py": "def discount(price, percent):\n    return price - price * percent / 100\n\n\n"
+                   "def total(prices):\n    return sum(prices)\n",
+        "test_shop.py": "import unittest\n\nfrom shop import discount, total\n\n\nclass ShopTest(unittest.TestCase):\n"
+                        "    def test_discount(self):\n        self.assertEqual(discount(100, 20), 80)\n\n"
+                        "    def test_total(self):\n        self.assertEqual(total([1.5, 2.5]), 4.0)\n"}),
+    ("Fix discounts over 100% making the price negative", {
+        "shop.py": "def discount(price, percent):\n    return max(0, price - price * percent / 100)\n\n\n"
+                   "def total(prices):\n    return sum(prices)\n",
+        "test_shop.py": "import unittest\n\nfrom shop import discount, total\n\n\nclass ShopTest(unittest.TestCase):\n"
+                        "    def test_discount(self):\n        self.assertEqual(discount(100, 20), 80)\n\n"
+                        "    def test_discount_never_below_zero(self):\n        self.assertEqual(discount(50, 150), 0)\n\n"
+                        "    def test_total(self):\n        self.assertEqual(total([1.5, 2.5]), 4.0)\n"}),
+    ("Fix totals showing long decimals like 0.30000000000000004", {
+        "shop.py": "def discount(price, percent):\n    return max(0, price - price * percent / 100)\n\n\n"
+                   "def total(prices):\n    return round(sum(prices), 2)\n"}),
+]
+
+
+def make_demo(dest: Path) -> Path:
+    """The demo project, built in dest as a git repo with one commit per DEMO_STEPS entry."""
+    dest.mkdir(parents=True, exist_ok=True)
+    git = ["git", "-c", "user.name=Bite demo", "-c", "user.email=demo@example.invalid", "-c", "commit.gpgsign=false"]
+    # Fixed dates, so every run makes the same commits (and the same short shas as the README shows).
+    env = {**os.environ, "GIT_AUTHOR_DATE": "2026-01-01T12:00:00Z", "GIT_COMMITTER_DATE": "2026-01-01T12:00:00Z"}
+    subprocess.run(["git", "init", "-q"], cwd=dest, check=True, capture_output=True)
+    for subject, files in DEMO_STEPS:
+        for name, text in files.items():
+            (dest / name).write_text(text, encoding="utf-8", newline="\n")
+        subprocess.run([*git, "add", "-A"], cwd=dest, check=True, capture_output=True)
+        subprocess.run([*git, "commit", "-q", "-m", subject], cwd=dest, check=True, capture_output=True, env=env)
+    # The tests run with the Python Bite runs on, so the demo needs nothing else installed. Left out of the
+    # commits: its path differs on every machine.
+    (dest / ".bite.ini").write_text(f'[kit]\ntest_command = "{sys.executable}" -m unittest\n', encoding="utf-8")
+    (dest / ".git" / "info" / "exclude").write_text(".bite.ini\n", encoding="utf-8")
+    return dest
+
+
+def demo(argv: list) -> int:
+    dest = make_demo(Path(tempfile.mkdtemp(prefix="bite_demo_")) / "tiny-shop")
+    print(f"Bite demo: a made-up project in {dest}\n"
+          "Two of its commits say they fixed something. One added a test for its fix, the other didn't.\n"
+          "Bite takes each fix back out and runs the tests, to see whether any test notices it's gone.\n", flush=True)
+    here = os.getcwd()
+    os.chdir(dest)
+    try:
+        rc = main(["--free", *(a for a in argv if a not in ("--demo", "--free"))])
+    finally:
+        os.chdir(here)
+    print("\nThat was the demo; nothing of yours was touched. To check your own project: go into it and run bite --free")
+    return rc
+
+
 # Every option main() accepts; each one must be in the help text above (the self-test checks).
-FLAGS = {"--free", "--all", "--any", "--serious", "--again", "--roast"}
+FLAGS = {"--free", "--all", "--any", "--serious", "--again", "--roast", "--demo"}
 VALUED = {"--last": int, "--free-checks": int, "--suspects": int, "--budget": float, "--since": str}
 
 
@@ -895,6 +954,8 @@ def main(argv=None):
         print("Bite: git isn't installed (or isn't on PATH). Install it from https://git-scm.com, "
               "then open a new terminal window.")
         return 1
+    if "--demo" in argv:
+        return demo(argv)
     root = repo.repo_root(os.getcwd())
     if root is None:
         print("Bite: not inside a git repository.")
