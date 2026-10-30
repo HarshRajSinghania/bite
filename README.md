@@ -116,6 +116,7 @@ Each bug was reproduced with a standalone script in a clean environment before i
 | west | Loading a manifest from data with a reserved project name crashed. Fix [#1013](https://github.com/zephyrproject-rtos/west/pull/1013) approved by two maintainers and merged. |
 | midea-lan | A message encoder got the frame length wrong when no padding was needed. Fix [#251](https://github.com/wuwentao/midea-lan/pull/251) merged. The maintainer [wrote](https://github.com/wuwentao/midea-lan/pull/251): "Thank you @connabyss for submitting this PR and for finding and fixing the 8370 framing bug." |
 | mizani | Number labels picked too few decimals when values were close together (`[0, 10, 10.5]` showed as `10, 10`). Fix [#90](https://github.com/has2k1/mizani/pull/90) merged. The maintainer [wrote](https://github.com/has2k1/mizani/pull/90): "@connabyss, thank you." |
+| pamqp | Bite's free check found past fixes that no test would notice breaking, including one where `Basic.Reject(requeue=False)` was flipped back to `True`. Tests for all three ([#86](https://github.com/gmr/pamqp/pull/86)) merged. |
 
 ## Sent, waiting for review
 
