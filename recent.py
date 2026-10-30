@@ -612,13 +612,17 @@ def write_comment(root: Path, cs: list) -> Path:
     elif "held" in kinds:
         lines += ["### ✅ Bite: your tests really check the changes in this pull request", "",
                   "Taking each change back out makes a test fail, so the tests would notice if it broke."]
-    else:
+    elif checked:
         lines += ["### ➖ Bite: nothing here it could check", "", "No change in this pull request could be tested this way."]
-    lines += ["", "<details><summary>Every commit, and how Bite checked</summary>", ""]
-    lines += [line(c, k) for c, k in zip(checked, kinds)]
-    lines += ["", "Bite takes each commit's code change back out and runs your tests. A test that really checks a change "
-              "fails when the change is gone. The steps to rerun each check yourself are on the job's summary page. "
-              "[What is Bite?](https://github.com/connabyss/bite)", "", "</details>"]
+    else:
+        lines += ["### ➖ Bite: nothing here it could check", "", "No commit in this pull request changed code that Bite can test."]
+    # Every comment ends the same way: the fold, the same few words on how Bite checks, and the link.
+    lines += ["", f"<details><summary>{'Every commit, and how Bite checked' if checked else 'How Bite checks'}</summary>", ""]
+    lines += [line(c, k) for c, k in zip(checked, kinds)] + ([""] if checked else [])
+    lines += ["Bite takes each commit's code change back out and runs your tests. A test that really checks a change "
+              "fails when the change is gone. "
+              + ("The steps to rerun each check yourself are on the job's summary page. " if checked else "")
+              + "[What is Bite?](https://github.com/connabyss/bite)", "", "</details>"]
     p = proof_dir(root) / "COMMENT.md"
     p.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return p
@@ -726,6 +730,7 @@ def main(argv=None):
     print(f"Bite: {len(cs)} {who} changed code in the last {opt('--last', 40)}.", flush=True)
     if not cs:
         print("Nothing to check. Try --all, or a larger --last.")
+        write_comment(root, [])
         return 0
     n_out = 0
     if covers:  # a change the test command can't reach can't fail a test: that says nothing about the change
@@ -738,6 +743,7 @@ def main(argv=None):
                   + ", ".join(c["sha"][:8] for c in out), flush=True)
         if not cs:
             print("Nothing the tests can reach. Check test_covers in .bite.ini.")
+            write_comment(root, [])
             return 0
     free_only = "--free" in argv
     if not any(c["claims"] for c in cs) and "--any" not in argv:
@@ -746,6 +752,7 @@ def main(argv=None):
               + (f". Checking the {len(cs)} that added tests: do those tests check the change?" if cs else
                  ". (--any checks them anyway.)"), flush=True)
         if not cs:
+            write_comment(root, [])
             return 0
         free_only = True  # no claim to turn into a test
     if "--serious" in argv:  # only fix claims about data, money, logins, security, crashes or leaks
@@ -753,6 +760,7 @@ def main(argv=None):
         print(f"  {len(cs)} of them claim a fix about data, money, logins, security, crashes or leaks.")
         if not cs:
             print("Nothing serious to check. Run without --serious to test the other claims.")
+            write_comment(root, [])
             return 0
     cs.sort(key=lambda c: -c["score"])
     logf = root / "bite_proof" / "recent_log.json"

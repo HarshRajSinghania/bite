@@ -40,12 +40,8 @@ runs:
       run: |
         post_comment() {
           [ "$COMMENT" = "true" ] || return 0
-          body=bite_proof/COMMENT.md
-          if [ ! -f "$body" ]; then
-            mkdir -p bite_proof
-            printf '<!-- bite-check -->\n### ➖ Bite: nothing here it could check\n\n%s\n' \
-              "No commit in this pull request changed code that Bite can test." > "$body"
-          fi
+          body=bite_proof/COMMENT.md  # bite writes it on every run that ends normally
+          [ -f "$body" ] || return 0
           id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
             --jq '.[] | select(.body | startswith("<!-- bite-check -->")) | .id' | head -n 1) &&
           if [ -n "$id" ]; then
@@ -66,10 +62,6 @@ runs:
         [ "$n" -gt "$MAX" ] && n=$MAX
         echo "This pull request has $n commit(s) to check."
         rm -f bite_proof/FREE_REPORT.md bite_proof/COMMENT.md
-        if [ "$n" -eq 0 ]; then
-          post_comment
-          exit 0
-        fi
         rc=0
         bite --free --last "$n" --free-checks "$n" $ARGS || rc=$?
         if [ "$rc" -ne 0 ]; then

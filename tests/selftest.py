@@ -397,6 +397,21 @@ check("comment: the pull request comment leads with a plain verdict and what to 
       and "<details>" in note and "Fix &lt;b&gt;neg" in note)
 check("report: commit subjects are escaped, not run as HTML", "Fix &lt;b&gt;neg&lt;/b&gt; &amp; friends" in page)
 
+# Every kind of comment ends the same way: the fold with the same words on how Bite checks, then the link.
+c1 = {"sha": "a" * 40, "subject": "one"}
+notes = {"worth a look": note}
+for name, cs in (("tests check it", [dict(c1, undo="guarded")]), ("couldn't check", [dict(c1, undo="tests fail at this commit")]),
+                 ("no code", [])):
+    notes[name] = recent.write_comment(root, cs).read_text(encoding="utf-8")
+rc, out = run(root, ["--free", "--last", "0"], fake_worker())
+notes["nothing in the pull request"] = (root / "bite_proof" / "COMMENT.md").read_text(encoding="utf-8") if rc == 0 else ""
+how = "Bite takes each commit's code change back out and runs your tests. A test that really checks a change fails when the change is gone."
+check("comment: every kind (worth a look, tests check it, couldn't check, no code) ends with the same words and link",
+      all(n.startswith("<!-- bite-check -->\n### ") and how in n
+          and n.endswith("[What is Bite?](https://github.com/connabyss/bite)\n\n</details>\n") for n in notes.values()))
+check("comment: a run with nothing to check still writes the comment the GitHub Action posts",
+      "No commit in this pull request changed code" in notes["nothing in the pull request"])
+
 # Docs: the key rule is stated where a reader looks first.
 for doc in ("AGENTS.md", "README.md"):
     t = (KIT / doc).read_text(encoding="utf-8")
