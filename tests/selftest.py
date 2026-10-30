@@ -263,6 +263,23 @@ with patch.dict(os.environ, {"PYTHONPATH": str(installed)}):
     rc, out = run(inst_root, ["--free", "--last", "1"], fake_worker())
 check("installed copy: a module the commit created isn't loaded from the install instead (#28)",
       "ITS TESTS DIDN'T NOTICE" not in out and "✅ tests crash without it" in out)
+# A src/ layout installed with pip install -e .: the copy must load its own src/, not the checkout's.
+src_root = make_repo()
+(src_root / "src" / "shapes").mkdir(parents=True)
+(src_root / "src" / "shapes" / "__init__.py").write_text("def sides(name):\n    return 0\n")
+(src_root / "test_shapes.py").write_text("import unittest\nfrom shapes import sides\n\nclass S(unittest.TestCase):\n"
+                                         "    def test_square(self):\n        self.assertEqual(sides('square'), 4)\n")
+(src_root / ".bite.ini").write_text(f"[kit]\ntest_command = {PY} -m unittest -q test_shapes\nallowed_programs = {PY}\n")
+commit(src_root, "start shapes")
+(src_root / "src" / "shapes" / "__init__.py").write_text("def sides(name):\n    return 4 if name == 'square' else 0\n")
+commit(src_root, "Fix sides for a square" + CLAUDE)
+editable = Path(tempfile.mkdtemp())  # what pip install -e . puts on the path: today's code
+(editable / "shapes").mkdir()
+(editable / "shapes" / "__init__.py").write_text((src_root / "src" / "shapes" / "__init__.py").read_text())
+with patch.dict(os.environ, {"PYTHONPATH": str(editable)}):
+    rc, out = run(src_root, ["--free", "--last", "1"], fake_worker())
+check("src/ layout: each copy loads its own src/, not an editable install of today's code",
+      "NO TEST NOTICED" not in out and "noticed by test_square" in out)
 rc, out = run(root, ["--free", "--last", "1"], fake_worker())
 check("a run that flags nothing says what it verified", "Checked 1 commit(s): a test noticed 1," in out)
 

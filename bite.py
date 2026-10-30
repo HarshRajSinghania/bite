@@ -573,6 +573,11 @@ def run_cmd(cmd: str, cwd: Path, timeout: int):
     env["PYTHONDONTWRITEBYTECODE"] = "1"  # stale bytecode once faked a pass
     env["BITE_SEED"] = SEED[0]
     env.update(EXTRA_ENV)
+    src = Path(cwd) / "src"
+    if (src.is_dir() and not (src / "__init__.py").exists()
+            and any((d / "__init__.py").exists() for d in src.iterdir() if d.is_dir())):
+        # A src/ layout installed with pip install -e . would load the checkout's code, not this copy's.
+        env["PYTHONPATH"] = os.pathsep.join(x for x in (str(src), env.get("PYTHONPATH", "")) if x)
     p = subprocess.Popen(cmd, shell=True, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env,
                          text=True, errors="replace", creationflags=flags, start_new_session=not WINDOWS)
     try:
