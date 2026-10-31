@@ -9,7 +9,7 @@ another system. So we read every unnoticed change by hand. **Real gaps** are the
 notice, like a new public method that nothing calls. They are small gaps in the tests, not bugs. Each one links to its
 commit.
 
-**In total:** 567 changes checked, 346 noticed by a test, and 21 real gaps, all small, in 10 of the 20 projects.
+**In total:** 567 changes checked, 346 noticed by a test, and 20 real gaps, all small, in 10 of the 20 projects.
 The other 10 had none.
 
 | Project | Language | Changes checked | Noticed by a test | Real gaps |
@@ -18,7 +18,7 @@ The other 10 had none.
 | [marshmallow](https://github.com/marshmallow-code/marshmallow) | Python | 36 | 18 | 2 small: [ipaddress types in `TYPE_MAPPING`](https://github.com/marshmallow-code/marshmallow/commit/c38b48ec), [a stale name in `__all__`](https://github.com/marshmallow-code/marshmallow/commit/5429f0d4) |
 | [more-itertools](https://github.com/more-itertools/more-itertools) | Python | 34 | 21 | none ✅ |
 | [packaging](https://github.com/pypa/packaging) | Python | 38 | 37 | none ✅ |
-| [pluggy](https://github.com/pytest-dev/pluggy) | Python | 32 | 22 | 2 small: [a test that can't fail](https://github.com/pytest-dev/pluggy/commit/0b7790eb), [`DistFacade` from its old place](https://github.com/pytest-dev/pluggy/commit/755339bf) |
+| [pluggy](https://github.com/pytest-dev/pluggy) | Python | 32 | 22 | 1 small: [`DistFacade` from its old place](https://github.com/pytest-dev/pluggy/commit/755339bf) |
 | [Rich](https://github.com/Textualize/rich) | Python | 37 | 15 | 1 small: [`<kbd>` keys in Markdown](https://github.com/Textualize/rich/commit/a9c4aaba) |
 | [Express](https://github.com/expressjs/express) | JavaScript | 4 | 4 | none ✅ |
 | [minimist](https://github.com/minimistjs/minimist) | JavaScript | 21 | 15 | none ✅ |
@@ -47,12 +47,14 @@ and old commits whose tests can't run any more with today's tools.
   object-inspect, and pointer fixes in bytes that only Rust's Miri checker can see.
 - **A later test:** a few fixes had no test on the day, and one was added later (more-itertools, minimist, testify).
 
-## The most interesting find
+## A close call
 
 [pluggy 0b7790eb](https://github.com/pytest-dev/pluggy/commit/0b7790eb) fixed how hook argument names are read for
-a function attached to a class. Its new test defines that function *inside* the test, which gives the function a
-dotted name, so the old code already handled it. Taken out, the fix leaves the test still passing. A test written
-with a function at the top of the file would catch it.
+a function attached to a class. Its new test defined that function *inside* the test, which gave it a dotted name,
+so on the day the old code already passed it: taking the fix out left the test green. Five days later
+[dd20a85](https://github.com/pytest-dev/pluggy/commit/dd20a85) changed how those names are read, and today the
+same test does fail without the fix. So it isn't counted as a gap, but it shows what Bite looks for: a test can
+pass for the wrong reason.
 
 ## What the scoreboard taught Bite
 
