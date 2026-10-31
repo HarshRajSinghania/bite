@@ -2,6 +2,7 @@
 Bite: did your coding agent's recent "done" commits really do what they said?
 
     bite                      check the last 40 commits (step 2 needs an API key)
+    bite --version            print the installed version
     bite --free               step 1 only: no key, no cost
     bite --demo               try it on a tiny made-up project first (free, about 30 seconds)
     bite --last 80 --suspects 3 --budget 1.00
@@ -1160,11 +1161,25 @@ def extras(root: Path, cfg) -> list:
     return [g.strip().replace("\\", "/") for g in kit.get("test_covers", "").split(",") if g.strip()]
 
 
+def _installed_version():
+    try:
+        from importlib.metadata import PackageNotFoundError, version
+
+        return version("bite-check")
+    except PackageNotFoundError:  # running from a clone, not installed
+        text = (bite.KIT_DIR / "pyproject.toml").read_text(encoding="utf-8")
+        found = re.search(r'^version\s*=\s*"([^"]+)"', text, re.M)
+        return found.group(1) if found else "unknown"
+
+
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv[:1] == ["live"]:  # the live check for coding AIs (live.py): bite live, bite live --hook
         import live
         return live.main(argv[1:])
+    if "--version" in argv:
+        print(f"bite {_installed_version()}")
+        return 0
     if "-h" in argv or "--help" in argv:
         print(__doc__.strip())
         return 0
