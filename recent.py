@@ -791,6 +791,14 @@ def flat(text: str) -> str:
     return re.sub(r"\[([^]]+)\]\([^)]+\)", r"\1", text).replace("**", "").replace("`", "")
 
 
+def short(title: str, n: int = 70) -> str:
+    """A commit title cut to fit a terminal line: at a space, with "…", never mid-word."""
+    if len(title) <= n:
+        return title
+    cut = title[:n - 1].rsplit(" ", 1)[0] if " " in title[:n - 1] else title[:n - 1]
+    return cut.rstrip(" ,.:;-") + "…"
+
+
 def commit_link(root: Path) -> str:
     """https://github.com/owner/name/commit/ for a GitHub origin, else "" (the report then shows plain shas)."""
     url = repo.git(root, "remote", "get-url", "origin") or ""
@@ -808,11 +816,11 @@ def write_html(root: Path, cs: list, tried: list, seconds: float) -> Path:
     kinds = [say(c)[0] for c in checked]
     false_done = [r for r in tried if r.get("status") == "FALSE DONE"]
     sha = lambda x: (f'<a href="{e(link + x)}">{x[:8]}</a>' if link else x[:8])  # noqa: E731
-    rows = "".join(f'<tr class="{k}"><td><code>{sha(c["sha"])}</code></td><td>{e(c["subject"][:90])}</td>'
+    rows = "".join(f'<tr class="{k}"><td><code>{sha(c["sha"])}</code></td><td>{e(c["subject"])}</td>'
                    f'<td><span class="dot"></span>{e(flat(w)[2:].strip())}' + (f'<div class="why">{e(c["why"])}</div>' if c.get("why") else "")
                    + "</td></tr>" for c in checked for k, _, w in [say(c)])
     claims = "".join(f'<tr class="{"odd" if r["status"] == "FALSE DONE" else "held" if r["status"] == "holds" else "skip"}">'
-                     f'<td><code>{sha(r["sha"])}</code></td><td>{e(r["subject"][:90])}</td><td><span class="dot"></span>'
+                     f'<td><code>{sha(r["sha"])}</code></td><td>{e(r["subject"])}</td><td><span class="dot"></span>'
                      + (f'False "done": {e(r.get("bug", ""))} Today\'s code: {e(r.get("today", ""))}.'
                         if r["status"] == "FALSE DONE" else "The claim held" if r["status"] == "holds" else e(r["status"]))
                      + "</td></tr>" for r in tried)
@@ -881,7 +889,7 @@ def write_comment(root: Path, cs: list, none: str = "", error: str = "", newest:
     why = lambda c: f" Why: {html.escape(c['why'], quote=False).replace('`', chr(39))}." if c.get("why") else ""  # noqa: E731
     # The verdict first; the commit's own title after it, quoted and small, so it doesn't read as Bite talking.
     line = lambda c, k, w: (f"- {w}" + (why(c) if k == "fail" or "tests failed here" in w else "")  # noqa: E731
-                            + f"<br><sub>Commit {sha(c)}: “{html.escape(c['subject'][:70], quote=False)}”</sub>")
+                            + f"<br><sub>Commit {sha(c)}: “{html.escape(c['subject'], quote=False)}”</sub>")
     lines = ["<!-- bite-check -->"]
     if error:
         lines += ["### ❌ Bite couldn't start", "", html.escape(error, quote=False), "",
@@ -1230,7 +1238,7 @@ def main(argv=None):
             c["score"] += 2
         elif c["undo"] == "TEST GUARDS NOTHING":
             c["score"] += 3
-        print(f"  {c['sha'][:8]} {say(c)[1]:<28} {c['subject'][:70]}", flush=True)
+        print(f"  {c['sha'][:8]} {say(c)[1]:<28} {short(c['subject'])}", flush=True)
         if c.get("why"):  # say what broke, so it's clear whether it's the project or the copy
             print(f"           why: {c['why']}", flush=True)
         save_log(root, kept, cs)
@@ -1284,7 +1292,7 @@ def main(argv=None):
             print(f"    {'wrote one: passes with the change, fails without it' if c['guard']['status'] == 'WRITTEN' else c['guard']['status']}",
                   flush=True)
     for c in flagged:
-        print(f"{say(c)[1]}: {c['sha'][:8]} \"{c['subject'][:70]}\": {flat(say(c)[2])[2:].strip()}")
+        print(f"{say(c)[1]}: {c['sha'][:8]} \"{short(c['subject'])}\": {flat(say(c)[2])[2:].strip()}")
     checked = [c for c in cs if c.get("undo")]
     held = [c for c in checked if c["undo"].startswith(("guarded", "closed since"))]
     print(f"\nChecked {len(checked)} commit(s): a test noticed {len(held)}, no test noticed {len(flagged)}, "
