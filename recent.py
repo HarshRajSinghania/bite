@@ -47,6 +47,7 @@ import asyncio
 import io
 import json
 import os
+import posixpath
 import re
 import shlex
 import shutil
@@ -555,6 +556,9 @@ def claim_command(cfg, rel: str) -> str:
     if re.search(r"\bdotnet(\.exe)?\s+test\b", cmd):  # dotnet test takes no file: pick the claim's class by name
         cmd = re.sub(r'\s--filter(\s+|=)("[^"]*"|\S+)', "", cmd)
         return f"{cmd} {DOTNET_FILTER}"
+    if re.search(r"\bgo\s+test\b", cmd):  # go test takes packages, not a file next to ./...: run the file's package
+        toks = [t for t in cmd.split() if not (t in (".", "./...") or t.startswith("./") or t.endswith("/..."))]
+        return " ".join(toks) + " ./" + (posixpath.dirname(rel) or ".")
     if "pytest" in cmd:  # keep the runner and its options, drop the folders it was given: only this file runs
         toks = cmd.split()
         i = next(i for i, t in enumerate(toks) if "pytest" in t)
