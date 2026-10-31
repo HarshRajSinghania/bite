@@ -106,6 +106,15 @@ with tempfile.TemporaryDirectory() as tmp:
             check("missing key fails clearly", False)
 
 
+project = (KIT / "pyproject.toml").read_text(encoding="utf-8")
+expected_version = next(line.split("=", 1)[1].strip().strip('"') for line in project.splitlines()
+                        if line.startswith("version ="))
+buf = io.StringIO()
+with contextlib.redirect_stdout(buf):
+    rc = recent.main(["--version"])
+check("--version prints the installed version and exits 0",
+      rc == 0 and buf.getvalue().strip() == f"bite {expected_version}")
+
 a = {"subject": "Fix tooltip spacing", "body": "", "sha": "x"}
 b = {"subject": "Fix export so saved files aren't truncated", "body": "", "sha": "y"}
 for c in (a, b):
