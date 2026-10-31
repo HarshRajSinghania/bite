@@ -1119,14 +1119,12 @@ def extras(root: Path, cfg) -> list:
 
 def _installed_version():
     try:
-        from importlib.metadata import version
+        from importlib.metadata import PackageNotFoundError, version
 
         return version("bite-check")
-    except Exception:  # running from a clone, not installed
-        import re as _re
-
-        text = (KIT / "pyproject.toml").read_text(encoding="utf-8")
-        found = _re.search(r'^version\s*=\s*"([^"]+)"', text, _re.M)
+    except PackageNotFoundError:  # running from a clone, not installed
+        text = (bite.KIT_DIR / "pyproject.toml").read_text(encoding="utf-8")
+        found = re.search(r'^version\s*=\s*"([^"]+)"', text, re.M)
         return found.group(1) if found else "unknown"
 
 

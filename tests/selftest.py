@@ -7,6 +7,7 @@ import os
 import subprocess
 import sys
 import tempfile
+from importlib.metadata import PackageNotFoundError
 from pathlib import Path
 from unittest.mock import patch
 
@@ -113,6 +114,13 @@ buf = io.StringIO()
 with contextlib.redirect_stdout(buf):
     rc = recent.main(["--version"])
 check("--version prints the installed version and exits 0",
+      rc == 0 and buf.getvalue().strip() == f"bite {expected_version}")
+
+buf = io.StringIO()
+with patch("importlib.metadata.version", side_effect=PackageNotFoundError("bite-check")), \
+        contextlib.redirect_stdout(buf):
+    rc = recent.main(["--version"])
+check("--version falls back to pyproject.toml when Bite isn't installed",
       rc == 0 and buf.getvalue().strip() == f"bite {expected_version}")
 
 a = {"subject": "Fix tooltip spacing", "body": "", "sha": "x"}
