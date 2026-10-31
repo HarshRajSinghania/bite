@@ -9,8 +9,9 @@ another system. So we read every unnoticed change by hand. **Real gaps** are the
 notice, like a new public method that nothing calls. They are small gaps in the tests, not bugs. Each one links to its
 commit.
 
-**In total:** 567 changes checked, 346 noticed by a test, and 20 real gaps, all small, in 10 of the 20 projects.
-The other 10 had none.
+**In total:** 567 changes checked, 349 noticed by a test, and 17 real gaps, all small, in 10 of the 20 projects.
+The other 10 had none. Every gap below was rechecked on Oct 31 against each project's code as it is today: the
+change was taken out of today's code and the tests still passed.
 
 | Project | Language | Changes checked | Noticed by a test | Real gaps |
 |---|---|---|---|---|
@@ -24,14 +25,14 @@ The other 10 had none.
 | [minimist](https://github.com/minimistjs/minimist) | JavaScript | 21 | 15 | none ✅ |
 | [object-inspect](https://github.com/inspect-js/object-inspect) | JavaScript | 37 | 25 | none ✅ |
 | [qs](https://github.com/ljharb/qs) | JavaScript | 40 | 40 | none ✅ |
-| [chi](https://github.com/go-chi/chi) | Go | 27 | 21 | 2 small: [a test that only works in a terminal](https://github.com/go-chi/chi/commit/878fe71f), [XML compression](https://github.com/go-chi/chi/commit/d7b767bc) |
+| [chi](https://github.com/go-chi/chi) | Go | 27 | 22 | 1 small: [XML compression](https://github.com/go-chi/chi/commit/d7b767bc) |
 | [cobra](https://github.com/spf13/cobra) | Go | 31 | 17 | 1 small: [completing map flags more than once](https://github.com/spf13/cobra/commit/756ba6da) |
 | [go-humanize](https://github.com/dustin/go-humanize) | Go | 17 | 16 | none ✅ |
 | [testify](https://github.com/stretchr/testify) | Go | 32 | 16 | 1 small: [`Helper()` in IsIncreasing and friends](https://github.com/stretchr/testify/commit/65e0b94e) |
-| [uuid](https://github.com/google/uuid) | Go | 21 | 13 | 4 small: [error values](https://github.com/google/uuid/commit/0e97ed3b), [`NewString`](https://github.com/google/uuid/commit/bfb86fa4), [bad JSON in `NullUUID`](https://github.com/google/uuid/commit/44b5fee7), [`Max`](https://github.com/google/uuid/commit/c58770eb) |
+| [uuid](https://github.com/google/uuid) | Go | 21 | 13 | 4 small: [three of the error values](https://github.com/google/uuid/commit/0e97ed3b), [`NewString`](https://github.com/google/uuid/commit/bfb86fa4), [bad JSON in `NullUUID`](https://github.com/google/uuid/commit/44b5fee7), [`Max`](https://github.com/google/uuid/commit/c58770eb) |
 | [anyhow](https://github.com/dtolnay/anyhow) | Rust | 22 | 1 | none ✅ |
-| [bytes](https://github.com/tokio-rs/bytes) | Rust | 38 | 11 | 3 small: [`try_unsplit`](https://github.com/tokio-rs/bytes/commit/804ee6d0), [`as_uninit_slice_mut`](https://github.com/tokio-rs/bytes/commit/b8d27c01), [`remaining_mut`](https://github.com/tokio-rs/bytes/commit/4b53a29e) |
-| [indexmap](https://github.com/indexmap-rs/indexmap) | Rust | 38 | 7 | 4 small: [`get_key_value_mut`](https://github.com/indexmap-rs/indexmap/commit/cd4c1a53), [`split_at_checked`](https://github.com/indexmap-rs/indexmap/commit/61c9d534), [`Clone` for `IntoKeys`](https://github.com/indexmap-rs/indexmap/commit/88efd0ca), [`VacantEntry::insert_sorted_by`](https://github.com/indexmap-rs/indexmap/commit/3dbb123c) |
+| [bytes](https://github.com/tokio-rs/bytes) | Rust | 38 | 12 | 2 small: [`as_uninit_slice_mut`](https://github.com/tokio-rs/bytes/commit/b8d27c01), [`remaining_mut`](https://github.com/tokio-rs/bytes/commit/4b53a29e) |
+| [indexmap](https://github.com/indexmap-rs/indexmap) | Rust | 38 | 8 | 3 small: [`get_key_value_mut`](https://github.com/indexmap-rs/indexmap/commit/cd4c1a53), [`split_at_checked`](https://github.com/indexmap-rs/indexmap/commit/61c9d534), [`Clone` for `IntoKeys`](https://github.com/indexmap-rs/indexmap/commit/88efd0ca) |
 | [serde_json](https://github.com/serde-rs/json) | Rust | 16 | 12 | none ✅ |
 | [FluentValidation](https://github.com/FluentValidation/FluentValidation) | C# | 9 | 5 | none ✅ |
 
@@ -47,7 +48,7 @@ and old commits whose tests can't run any more with today's tools.
   object-inspect, and pointer fixes in bytes that only Rust's Miri checker can see.
 - **A later test:** a few fixes had no test on the day, and one was added later (more-itertools, minimist, testify).
 
-## A close call
+## Close calls
 
 [pluggy 0b7790eb](https://github.com/pytest-dev/pluggy/commit/0b7790eb) fixed how hook argument names are read for
 a function attached to a class. Its new test defined that function *inside* the test, which gave it a dotted name,
@@ -55,6 +56,13 @@ so on the day the old code already passed it: taking the fix out left the test g
 [dd20a85](https://github.com/pytest-dev/pluggy/commit/dd20a85) changed how those names are read, and today the
 same test does fail without the fix. So it isn't counted as a gap, but it shows what Bite looks for: a test can
 pass for the wrong reason.
+
+Rechecking every gap against today's code found three more that tests now cover, so they aren't counted either:
+[chi 878fe71f](https://github.com/go-chi/chi/commit/878fe71f) (a later change,
+[7fcb8a2](https://github.com/go-chi/chi/commit/7fcb8a2), made its test work outside a terminal),
+[bytes `try_unsplit`](https://github.com/tokio-rs/bytes/commit/804ee6d0) (an example in its docs tests it), and
+[indexmap `VacantEntry::insert_sorted_by`](https://github.com/indexmap-rs/indexmap/commit/3dbb123c) (a test with
+random inputs covers it).
 
 ## What the scoreboard taught Bite
 
