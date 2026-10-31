@@ -11,7 +11,9 @@ import bite  # noqa: E402
 
 def run_printing(tmp_path, lines):
     script = tmp_path / "fake_tests.py"
-    script.write_text("print(" + repr("\n".join(lines)) + ")\n", encoding="utf-8")
+    # Written as UTF-8 bytes, the way Node prints them, whatever the console's code page.
+    script.write_text("import sys\nsys.stdout.buffer.write(" + repr(("\n".join(lines) + "\n").encode("utf-8")) + ")\n",
+                      encoding="utf-8")
     ini = tmp_path / "kit.ini"
     ini.write_text(f'[kit]\nproject_folder = {tmp_path}\ntest_command = "{sys.executable}" "{script}"\n',
                    encoding="utf-8")

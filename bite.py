@@ -58,8 +58,9 @@ def _list(value: str) -> list:
 
 DEFAULT_FAIL = r"\bFAIL|SCRIPT ERROR|SHADER ERROR|Parse Error|parse error|ignoring script|Traceback"
 # A line that reports a test that passed: its name can say "parse error" or "FAIL" (mocha's "✔ should persist
-# store when parse error"), and that is not a failure.
-PASSED_LINE = re.compile(r"^\s*(?:[✔✓√]|ok\b|PASS(?:ED)?\b|--- PASS\b)")
+# store when parse error"), and that is not a failure. Mocha writes its marks as UTF-8; read with Windows' usual
+# code page they arrive as "âœ”", "âœ“" or "âˆš".
+PASSED_LINE = re.compile(r"^\s*(?:[✔✓√]|âœ”|âœ“|âˆš|ok\b|PASS(?:ED)?\b|--- PASS\b)")
 
 
 class Config:
