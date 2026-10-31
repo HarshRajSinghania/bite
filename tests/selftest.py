@@ -329,6 +329,23 @@ rc, out = run(weak_commit("chore(lint): tidy double"), ["--free", "--last", "1"]
 check("noise: a tidy-up isn't flagged", "ITS TESTS DIDN'T NOTICE" not in out and "tidy-up" in out)
 rc, out = run(weak_commit("Refactor double into one line"), ["--free", "--last", "1"], fake_worker())
 check("noise: a refactor or rename without a \"refactor:\" prefix isn't flagged", "ITS TESTS DIDN'T NOTICE" not in out and "tidy-up" in out)
+for subject in ("Release 1.0.154", "Bump version to 12.2.0", "v2.3.1"):
+    rc, out = run(weak_commit(subject), ["--free", "--last", "1"], fake_worker())
+    check(f"noise: a release commit ({subject}) isn't flagged", "ITS TESTS DIDN'T NOTICE" not in out and "a release" in out)
+rc, out = run(weak_commit("Release the lock when double fails"), ["--free", "--last", "1"], fake_worker())
+check("a commit that only starts with \"Release\" is still checked", "ITS TESTS DIDN'T NOTICE" in out)
+# Go: interface{} and any are the same type, so swapping one for the other changes nothing a test could see.
+root = make_repo()
+(root / "box.go").write_text("package box\n\nfunc Keep(v interface{}) interface{} { return v }\n")
+commit(root, "add box")
+(root / "box.go").write_text("package box\n\nfunc Keep(v any) any { return v }\n")
+commit(root, "Replace interface{} with any")
+sha = recent.repo.git(root, "rev-parse", "HEAD")
+check("noise: Go interface{} -> any counts as no code change", recent.comment_only(root, sha, "box.go"))
+(root / "box.go").write_text("package box\n\nfunc Keep(v string) any { return v }\n")
+commit(root, "Keep strings only")
+sha = recent.repo.git(root, "rev-parse", "HEAD")
+check("a real Go type change still counts as code", not recent.comment_only(root, sha, "box.go"))
 root = make_repo()
 (root / "calc.py").write_text('"""Small number helpers."""\n\n' + (root / "calc.py").read_text().replace(
     "def double(x):\n", 'def double(x):\n    """Twice x: handles negatives too."""\n'))

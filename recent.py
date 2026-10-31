@@ -72,6 +72,8 @@ HERE = "win" if sys.platform.startswith("win") else "mac" if sys.platform == "da
 TIDY = re.compile(r"^(chore|style|ci|refactor|build|docs?|tests?)(\([^)]*\))?!?:|^(refactor\w*|renam\w*|clean(s|ed)? ?up|docs?|"
                   r"document\w*)\b|\b(lint|mypy|pyright|tidy|tidies|sort(ed)? imports|"
                   r"reformat\w*|formatting|whitespace|typos?)\b", re.I)
+# Releases: "Release 1.0.154", "Bump version to 12.2.0", "v2.3.1". They change the version number, not behaviour.
+RELEASE = re.compile(r"^(?:(?:release|releasing|prepare release|bump(?:ed|s)?(?: the)? version(?: to)?|version)\s+)?v?\d+(?:\.\d+)+\s*$", re.I)
 # A change for another Python version can't be checked on this one ("py3.8 fix", "for Python 3.14"); "3.12+" covers later ones.
 PY_VERSION = re.compile(r"\b(?:py(?:thon)?\s?|for |drop(?:s|ped|ping)? |on )3\.(\d{1,2})\b(\+| and (?:later|newer|up))?")
 # Speed-ups: tests check results, not speed, so the slower old code passing them is expected.
@@ -128,6 +130,8 @@ def skip_reason(subject: str, said: str) -> str:
     if for_py and not any(v == here or (later and here > v) for v, later in for_py):
         versions = "/".join(f"3.{v}" + ("+" if later else "") for v, later in dict.fromkeys(for_py))
         return f"built for Python {versions}, can't be checked on Python 3.{here}"
+    if RELEASE.search(subject):
+        return "a release, so it only changes the version number"
     if TIDY.search(subject):
         return "a tidy-up, so there's nothing new to check"
     if SPEED.search(subject) and not re.search(r"\bfix", subject, re.I):
@@ -161,7 +165,10 @@ def comment_only(root: Path, sha: str, rel: str) -> bool:
         if b is None:
             return None
         suf = Path(rel).suffix.lower()
-        return [t for t in ("".join(bite.strip_comment(ln, suf).split()) for ln in b.decode("utf-8", "replace").splitlines()) if t]
+        lines = [bite.strip_comment(ln, suf) for ln in b.decode("utf-8", "replace").splitlines()]
+        if suf == ".go":  # Go's any is interface{} under another name (Go 1.18+)
+            lines = [re.sub(r"\binterface\s*\{\s*\}", "any", ln) for ln in lines]
+        return [t for t in ("".join(ln.split()) for ln in lines) if t]
     old, new = code(f"{sha}^"), code(sha)
     if old is not None and old == new:
         return True
