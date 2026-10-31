@@ -1,0 +1,33 @@
+name: bot
+
+# The bite-check app's welcome bot: once an hour, opens one "Add Bite" issue in each repo the app was newly
+# installed on (bot/welcome.py). The app's key lives only in the "bot" environment, which only main can use,
+# so pull requests and forks never see it.
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Only print what it would post
+        type: boolean
+        default: true
+
+permissions: {}
+
+concurrency: bot
+
+jobs:
+  welcome:
+    if: github.repository == 'connabyss/bite' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: bot
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          persist-credentials: false
+      - run: python bot/welcome.py
+        env:
+          BITE_APP_KEY: ${{ secrets.BITE_APP_KEY }}
+          BITE_DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
