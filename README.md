@@ -108,6 +108,18 @@ badge line you can paste into your README:
 
 Prefer a gentler wording for the warnings? `bite --roast` gives the same results, phrased differently.
 
+## Famous repos Bite has checked
+
+| Project | Language | Changes checked | Noticed by a test | Real gaps |
+|---|---|---|---|---|
+| [Rich](https://github.com/Textualize/rich) | Python | 40 | 15 | 1 small: [`<kbd>` keys in Markdown](https://github.com/Textualize/rich/commit/a9c4aaba) |
+| [Click](https://github.com/pallets/click) | Python | 40 | 30 | 1 small: [`help` on custom setting types](https://github.com/pallets/click/commit/405a5481) |
+| [qs](https://github.com/ljharb/qs) | JavaScript | 40 | 40 | none ✅ |
+
+Checked Oct 30, 2026 with `bite --free`. Every bug fix Bite could check had a test. We read each unnoticed change
+by hand. Apart from the gaps above, they were things a test can't catch, like type hints, speed-ups, Windows-only
+code or rewrites that work the same.
+
 ## The catch that shows what it's for
 
 In [fellowapp/prosemirror-py](https://github.com/fellowapp/prosemirror-py), commit `3614c96` (co-authored by Claude) says:
