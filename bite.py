@@ -57,6 +57,10 @@ def _list(value: str) -> list:
 
 
 DEFAULT_FAIL = r"\bFAIL|SCRIPT ERROR|SHADER ERROR|Parse Error|parse error|ignoring script|Traceback"
+# A line that reports a test that passed: its name can say "parse error" or "FAIL" (mocha's "✔ should persist
+# store when parse error"), and that is not a failure. Mocha writes its marks as UTF-8; read with Windows' usual
+# code page they arrive as "âœ”", "âœ“" or "âˆš".
+PASSED_LINE = re.compile(r"^\s*(?:[✔✓√]|âœ”|âœ“|âˆš|ok\b|PASS(?:ED)?\b|--- PASS\b)")
 
 
 class Config:
@@ -704,7 +708,7 @@ def run_tests(cfg: Config, folder: Path) -> dict:
         why = out if out.startswith("not run:") else f"timed out after {cfg.test_timeout}s (test_command must exit on its own)"
         return {"ok": False, "why": why,
                 "fails": [], "count": None, "out": out}
-    fails = [ln.strip() for ln in out.splitlines() if re.search(cfg.fail_pattern, ln)]
+    fails = [ln.strip() for ln in out.splitlines() if re.search(cfg.fail_pattern, ln) and not PASSED_LINE.match(ln)]
     count = None
     if cfg.count_pattern:
         m = re.findall(cfg.count_pattern, out)
