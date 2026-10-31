@@ -81,17 +81,24 @@ jobs:
 """
 
 
+def language(repo):
+    """The repo's main language. A new repo or a fresh fork has none yet (GitHub works it out later), so guess
+    Python, Bite's most common case, rather than leave the owner to write the setup themselves."""
+    return repo.get("language") or "Python"
+
+
 def add_link(repo):
     """GitHub's new-file page for this repo, with .github/workflows/bite.yml already filled in."""
-    query = urllib.parse.urlencode({"filename": ".github/workflows/bite.yml", "value": workflow(repo.get("language"))},
+    query = urllib.parse.urlencode({"filename": ".github/workflows/bite.yml", "value": workflow(language(repo))},
                                    quote_via=urllib.parse.quote)
     return f"https://github.com/{repo['full_name']}/new/{urllib.parse.quote(repo['default_branch'])}?{query}"
 
 
 def issue_body(repo):
-    lang = repo.get("language")
-    setup_note = (f"The file installs what {lang} tests usually need. If your tests need more, add it in the step "
-                  "marked \"Add what your tests need here\" before you commit."
+    lang = language(repo)
+    setup_note = ((f"The file installs what {lang} tests usually need. " if repo.get("language") else
+                   "GitHub hasn't worked out this repo's language yet, so the file assumes Python tests. ")
+                  + "If your tests need more, add it in the step marked \"Add what your tests need here\" before you commit."
                   if lang in SETUP else
                   "Bite couldn't tell how your tests run, so add your setup in the step marked in the file before "
                   "you commit.")
@@ -183,7 +190,7 @@ def run(key_pem, dry_run):
                 if not wanted(repo) or welcomed(repo, token):
                     continue
                 if dry_run:
-                    print(f"{name}: would open the welcome issue ({repo.get('language')})")
+                    print(f"{name}: would open the welcome issue ({language(repo)})")
                     continue
                 call("POST", f"/repos/{name}/issues", token,
                      {"title": "Add Bite's free check (one click)", "body": issue_body(repo)})

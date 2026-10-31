@@ -32,8 +32,16 @@ def test_link_fills_in_the_workflow_for_the_repos_language():
 
 
 def test_unknown_language_gets_the_setup_note():
-    assert welcome.OTHER in welcome.workflow(None)
+    assert welcome.OTHER in welcome.workflow("Haskell")
     assert "couldn't tell how your tests run" in welcome.issue_body(repo(language="Haskell"))
+
+
+def test_a_repo_with_no_language_yet_gets_the_python_setup():
+    # a fresh fork of Rich had no language yet, so its owner got the generic file and had to write the setup
+    fresh = repo(language=None)
+    value = urllib.parse.parse_qs(urllib.parse.urlsplit(welcome.add_link(fresh)).query)["value"][0]
+    assert "actions/setup-python" in value
+    assert "assumes Python tests" in welcome.issue_body(fresh)
     assert "actions/setup-node" in welcome.workflow("TypeScript")
 
 
