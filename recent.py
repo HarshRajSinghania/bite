@@ -12,6 +12,8 @@ Bite: did your coding agent's recent "done" commits really do what they said?
     bite --all                same as plain bite (kept so older commands still work)
     bite --roast              the same results, worded a little more gently
     bite --since main         only commits that main doesn't have (the pull request check uses this)
+    bite --write-tests        after the free check, write the missing test for each change no test noticed
+                              (API key, capped by --budget; --suspects sets how many, default 3)
     (from a clone without installing: python recent.py, python recent.py --free, ...)
 
 Step 1 (free): for each commit that changed code, the change is taken back out and the tests are run. If they
@@ -25,6 +27,9 @@ only for what the commit claimed and fails for a real reason. Only then is it sh
 
 Results are written to bite_proof/ in the repo: report.html (one page to open in a browser), and each
 failing test plus the command that runs it.
+--write-tests (API key, capped by --budget): for each change no test noticed, a fresh worker writes the test that's
+missing, on a copy at that commit. Bite runs it itself and keeps it only if it passes twice with the change in and
+fails with the change taken out. It's shown ready to paste in (and in the pull request comment). Instead of step 2.
 Settings: .bite.ini in the repo (optional; first line [kit], then test_command = ...). claim_command runs one
 test file ({file}); without it Bite adds the file to test_command (for dotnet test it adds a --filter instead).
 test_covers = the paths the test command can reach (globs, comma-separated, e.g. Assets/Sim/*, tests/*): commits
@@ -356,6 +361,21 @@ def preflight(cfg) -> str:
     return ""
 
 
+def take_out(root: Path, c: dict, folder: Path) -> None:
+    """Put this commit's code files in the copy back the way they were before it (its tests stay)."""
+    for rel in c["code"]:
+        old = repo.git(root, "cat-file", "blob", f"{c['sha']}^:{rel}", raw=True)
+        t = folder / rel
+        if old is None and t.suffix == ".py" and t.name != "__init__.py":
+            # A file the commit created: deleting it would let Python find an installed copy (pip install -e .)
+            # and import that instead, so the tests pass. A file that refuses to load stands in for it.
+            bite.safe_write(folder, t, b'raise ImportError("Bite took this file out: the commit it checks made it")\n')
+        elif old is None:
+            t.unlink(missing_ok=True)
+        else:
+            bite.safe_write(folder, t, old)
+
+
 def undo_check(root: Path, c: dict, cfg) -> str:
     """'unguarded' when the tests still pass with this commit's code change taken back out; 'TEST GUARDS NOTHING'
     when that includes the tests the commit itself added or changed (they're kept: only the code is undone)."""
@@ -371,17 +391,7 @@ def undo_check(root: Path, c: dict, cfg) -> str:
             return "tests fail at this commit"
         if ran_nothing(bite.tests_cmd(fcfg), now["out"]):
             return "no tests ran at this commit"
-        for rel in c["code"]:
-            old = repo.git(root, "cat-file", "blob", f"{c['sha']}^:{rel}", raw=True)
-            t = folder / rel
-            if old is None and t.suffix == ".py" and t.name != "__init__.py":
-                # A file the commit created: deleting it would let Python find an installed copy (pip install -e .)
-                # and import that instead, so the tests pass. A file that refuses to load stands in for it.
-                bite.safe_write(folder, t, b'raise ImportError("Bite took this file out: the commit it checks made it")\n')
-            elif old is None:
-                t.unlink(missing_ok=True)
-            else:
-                bite.safe_write(folder, t, old)
+        take_out(root, c, folder)
         undone = bite.run_tests(fcfg, folder)
         if undone["ok"]:  # would be flagged: first rule out the usual harmless reasons
             if c.get("skip"):
@@ -563,16 +573,24 @@ def run_claim(cfg, folder: Path, test_rel: str, test_src: bytes, cmd: str) -> tu
     return bite.locked_run(at(cfg, folder), cmd, folder)
 
 
+def written_test(folder: Path, w: dict):
+    """The one test file the worker says it wrote, if it is inside the copy and named like Bite's tests; else None."""
+    rel = (w.get("test_file") or "").strip().replace("\\", "/")
+    tf = bite.inside(folder, str(folder / rel)) if rel else None
+    if not tf or not tf.is_file() or "biteclaim" not in re.sub(r"[_\-\s]", "", tf.name.lower()):
+        return None
+    return tf
+
+
 def try_claim(root: Path, c: dict, cfg, budget: float) -> dict:
     res = {"sha": c["sha"], "subject": c["subject"], "status": "holds"}
     diff = repo.git(root, "diff", f"{c['sha']}^", c["sha"], "--", *c["code"]) or ""
     folder = export(root, c["sha"], cfg)
     try:
         w = worker(cfg, folder, c, diff[:12000], budget)
-        rel = (w.get("test_file") or "").strip().replace("\\", "/")
         res["worker"] = w
-        tf = bite.inside(folder, str(folder / rel)) if rel else None
-        if not tf or not tf.is_file() or "biteclaim" not in re.sub(r"[_\-\s]", "", tf.name.lower()):
+        tf = written_test(folder, w)
+        if not tf:
             res["status"] = "no test written"
             return res
         rel = tf.relative_to(folder.resolve()).as_posix()
@@ -617,6 +635,81 @@ def try_claim(root: Path, c: dict, cfg, budget: float) -> dict:
     res["status"] = "FALSE DONE"
     res["matters"] = int(v.get("matters") or 0)
     res["bug"] = v.get("bug") or w.get("why", "")
+    return res
+
+
+# ---- --write-tests: the missing test, for a change no test noticed -------------------
+
+GUARD_SYSTEM = """You write the test a project is missing. You are on a copy of the project exactly as it was at
+one commit. The commit changed some code, and when that change is taken back out, every test still passes: no
+test notices what the change does. Write ONE small test that does.
+
+Rules:
+- The test must pass on this copy, with the change in. With the change taken out (the code files put back as they
+  were before the commit), it must fail. Bite checks both itself.
+- Test what the change does for a user of the code, through the code's normal way in, not its private details.
+  Test only what this change does. Don't test other features or ask for more.
+- Small and readable, under 30 lines, in the project's own test framework and style, so the owner can paste it in
+  as it is. One short comment at the top saying what it guards.
+- Put it in ONE new file whose name contains bite_claim and that the project's test runner picks up (for pytest:
+  test_bite_claim.py), next to the project's other tests. Don't edit any other file. For .NET (dotnet test):
+  BiteClaimTests.cs with a test class named BiteClaimTests, inside the folder of an existing test project.
+- Run it: `pytest <your file>` runs only your test if pytest is the runner; for .NET,
+  `dotnet test <the test project> --filter "FullyQualifiedName~BiteClaim"`; `bite-test` runs the whole suite.
+  Make sure it passes here.
+- Finish with one line of JSON and nothing after it:
+  {"test_file": "<path relative to the project>", "guards": "<the words that finish 'It checks that ...'>"}"""
+
+
+def guard_worker(cfg, folder: Path, c: dict, diff: str, budget: float) -> dict:
+    from claude_agent_sdk import ClaudeAgentOptions
+    opts = ClaudeAgentOptions(cwd=str(folder), model=cfg.model, system_prompt=GUARD_SYSTEM, max_turns=cfg.max_turns,
+                              max_budget_usd=budget, allowed_tools=[], disallowed_tools=["WebFetch", "WebSearch", "Task"],
+                              can_use_tool=bite.make_permission(at(cfg, folder), log=lambda *a: None), permission_mode="default",
+                              setting_sources=[], env={"ANTHROPIC_API_KEY": bite.load_key()})
+    prompt = f"Commit message:\n{c['subject']}\n\n{c['body']}\n\nThe code change in it:\n{diff}"
+    text, _ = asyncio.run(_agent(opts, prompt))
+    return last_json(text)
+
+
+def try_guard(root: Path, c: dict, cfg, budget: float) -> dict:
+    """A worker writes the missing test; Bite keeps it only if it passes twice with the change in and fails with
+    the change taken out (a real failure, not a test that can't load)."""
+    res = {"sha": c["sha"], "status": "no test written"}
+    diff = repo.git(root, "diff", f"{c['sha']}^", c["sha"], "--", *c["code"]) or ""
+    folder = export(root, c["sha"], cfg)
+    try:
+        w = guard_worker(cfg, folder, c, diff[:12000], budget)
+        tf = written_test(folder, w)
+        if not tf:
+            return res
+        rel = tf.relative_to(folder.resolve()).as_posix()
+        src = tf.read_bytes()
+    finally:
+        shutil.rmtree(folder.parent, ignore_errors=True)
+    cmd = claim_command(cfg, rel)
+    res.update(test_file=rel, run=cmd, test=src.decode("utf-8", "replace"), guards=w.get("guards", ""))
+    for _ in range(2):
+        f = export(root, c["sha"], cfg)
+        try:
+            rc, out = run_claim(cfg, f, rel, src, cmd)
+        finally:
+            shutil.rmtree(f.parent, ignore_errors=True)
+        if rc not in cfg.ok_codes or ran_nothing(cmd, out):
+            res["status"] = "its test failed with the change in"
+            return res
+    f = export(root, c["sha"], cfg)
+    try:
+        take_out(root, c, f)
+        rc, out = run_claim(cfg, f, rel, src, cmd)
+    finally:
+        shutil.rmtree(f.parent, ignore_errors=True)
+    if rc in cfg.ok_codes:
+        res["status"] = "its test passed without the change too"
+    elif rc is None or bite.load_failure(out):
+        res["status"] = "its test couldn't load without the change"
+    else:
+        res.update(status="WRITTEN", fail=repo.failure_excerpt(out, 15))
     return res
 
 
@@ -761,6 +854,11 @@ CAT = ('<img src="https://raw.githubusercontent.com/connabyss/bite/main/assets/b
        'width="24" height="24" alt="Bite" align="top">')
 
 
+# The code fence's language for a written test, so GitHub colours it.
+FENCE_LANG = {".py": "python", ".js": "js", ".mjs": "js", ".cjs": "js", ".ts": "ts", ".tsx": "tsx", ".jsx": "jsx",
+              ".rs": "rust", ".go": "go", ".cs": "csharp"}
+
+
 def write_comment(root: Path, cs: list, none: str = "", error: str = "", newest: str = "") -> Path:
     """The free check in plain words for a pull request comment (the GitHub Action posts it): a verdict, what to
     do next, then one line per commit. none says why nothing was checked, error why Bite couldn't start, and newest
@@ -771,6 +869,7 @@ def write_comment(root: Path, cs: list, none: str = "", error: str = "", newest:
     said = [say(c, newest) for c in checked]
     kinds = [k for k, _, _ in said]
     bad = [c for c, k in zip(checked, kinds) if k in ("gap", "odd")]
+    wrote = [c for c in bad if (c.get("guard") or {}).get("status") == "WRITTEN"]
     sha = lambda c: f"[`{c['sha'][:8]}`]({link}{c['sha']})" if link else f"`{c['sha'][:8]}`"  # noqa: E731
     why = lambda c: f" Why: {html.escape(c['why'], quote=False).replace('`', chr(39))}." if c.get("why") else ""  # noqa: E731
     # The verdict first; the commit's own title after it, quoted and small, so it doesn't read as Bite talking.
@@ -790,7 +889,11 @@ def write_comment(root: Path, cs: list, none: str = "", error: str = "", newest:
         lines += [f"### ⚠️ Bite: no test noticed {len(bad)} change{'' if one else 's'}", "",
                   f"Bite took {'the ⚠️ change' if one else 'each ⚠️ change'} below out and every test still passed. If "
                   f"{'it' if one else 'they'} broke later, nothing would warn you. That's fine for a tidy-up, a rename or docs.", "",
-                  "**Next:** if the change should do something, add a test that fails without it."]
+                  ("**Next:** if the change should do something, add a test that fails without it." if not wrote else
+                   "**Next:** paste in the test Bite wrote below (🧪): it passes with the change and fails without it."
+                   if len(wrote) == len(bad) else
+                   f"**Next:** paste in the test{'s' if len(wrote) > 1 else ''} Bite wrote below (🧪) for {len(wrote)} of "
+                   "them. For the rest, if the change should do something, add a test that fails without it.")]
     elif "none" in kinds and "held" not in kinds:
         lines += ["### ⚠️ Bite: no tests found", "", "Bite couldn't find any tests to run, so nothing would notice if this code broke.", "",
                   f"**Next:** add a test, or [point Bite at your tests]({SETUP_LINK})."]
@@ -806,7 +909,15 @@ def write_comment(root: Path, cs: list, none: str = "", error: str = "", newest:
         lines += ["### ➖ Bite: nothing here to check", "",
                   none or "No commit in this pull request changed code: only docs, settings or tests."]
     if checked:
-        lines += [""] + [line(c, k, w) for c, (k, _, w) in zip(checked, said)]
+        lines += [""] + [line(c, k, re.sub(r"\*\*Next:\*\* .*$", "**Next:** paste in the test Bite wrote (🧪 below).", w)
+                              if c in wrote else w) for c, (k, _, w) in zip(checked, said)]
+    for c in wrote:  # --write-tests: the missing test, folded, ready to paste in
+        g = c["guard"]
+        fence = "~~~~"  # never closed early by a ``` inside the test
+        lines += ["", f"<details><summary>🧪 The missing test for {sha(c)}: passes with the change, fails without it</summary>", "",
+                  f"Save it as `{g['test_file']}` and run `{g['run']}`."
+                  + (f" It checks that {html.escape(g['guards'].rstrip('.'), quote=False)[:200]}." if g.get("guards") else ""), "",
+                  fence + FENCE_LANG.get(Path(g["test_file"]).suffix.lower(), ""), g["test"].rstrip(), fence, "", "</details>"]
     total, last = os.environ.get("BITE_PR_COMMITS", ""), os.environ.get("BITE_CHECKED_COMMITS", "")
     if total.isdigit() and last.isdigit() and int(total) > int(last) and not error:
         lines += ["", f"Bite looked at the newest {last} of this pull request's {total} commits."]
@@ -855,6 +966,15 @@ def write_free(root: Path, cfg, flagged: list) -> Path:
                   "Write one small test of what this commit changed, next to the existing tests. Show that it fails "
                   f"with the change undone ({'; '.join(steps)} in a throwaway worktree) and passes "
                   "with it. Don't change the code.", "```", ""]
+        g = c.get("guard") or {}
+        if g.get("status") == "WRITTEN":
+            name = f"{sha[:8]}_{Path(g['test_file']).name}"
+            (proof_dir(root) / name).write_text(g["test"], encoding="utf-8")
+            lines += ["Bite wrote the missing test (`--write-tests`). It passed twice with the change in, and with the "
+                      "change taken out it failed like this:", "", "```", g["fail"].strip(), "```", "",
+                      f"- The test: [{name}]({name}). Save it as `{g['test_file']}`, then run `{g['run']}`.", ""]
+        elif g:
+            lines += [f"Bite tried to write the missing test (`--write-tests`) but didn't keep it: {g['status']}.", ""]
     p = proof_dir(root) / "FREE_REPORT.md"
     p.write_text("\n".join(lines), encoding="utf-8")
     return p
@@ -931,7 +1051,7 @@ def demo(argv: list) -> int:
 
 
 # Every option main() accepts; each one must be in the help text above (the self-test checks).
-FLAGS = {"--free", "--all", "--any", "--serious", "--again", "--roast", "--demo"}
+FLAGS = {"--free", "--all", "--any", "--serious", "--again", "--roast", "--demo", "--write-tests"}
 VALUED = {"--last": int, "--free-checks": int, "--suspects": int, "--budget": float, "--since": str}
 
 
@@ -1032,7 +1152,8 @@ def main(argv=None):
             print("Nothing the tests can reach. Check test_covers in .bite.ini.")
             write_comment(root, [], none="The code changed here is outside test_covers in .bite.ini, so the tests can't reach it.")
             return 0
-    free_only = "--free" in argv
+    write_tests = "--write-tests" in argv
+    free_only = "--free" in argv or write_tests  # --write-tests writes guard tests instead of testing claims
     if not any(c["claims"] for c in cs) and "--any" not in argv:
         cs = [c for c in cs if c["test_code"]]
         print(f"No fix claims found in the last {opt('--last', 40)} commits, so there's nothing to hold them to"
@@ -1105,6 +1226,17 @@ def main(argv=None):
         tried = before + tried
         print(f"All {len(tried)} claims tested held up: " + "; ".join(f"{r['sha'][:8]} {r['status']}" for r in tried))
     flagged = [c for c in cs if c.get("undo") == "TEST GUARDS NOTHING" or c.get("undo", "").startswith("unguarded")]
+    if write_tests and flagged:
+        budget, n = opt("--budget", 1.0), opt("--suspects", 3)
+        for c in flagged[:n]:
+            left = budget - SPENT[0]
+            if left < 0.15:
+                print("  budget used up")
+                break
+            print(f"  writing the missing test for {c['sha'][:8]} ...", flush=True)
+            c["guard"] = try_guard(root, c, cfg, min(left - 0.05, budget / n + 0.10))
+            print(f"    {'wrote one: passes with the change, fails without it' if c['guard']['status'] == 'WRITTEN' else c['guard']['status']}",
+                  flush=True)
     for c in flagged:
         print(f"{say(c)[1]}: {c['sha'][:8]} \"{c['subject'][:70]}\": {flat(say(c)[2])[2:].strip()}")
     checked = [c for c in cs if c.get("undo")]

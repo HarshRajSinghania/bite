@@ -55,6 +55,10 @@ bite --free
    itself, twice, on that commit and on today's code. A second fresh check must agree the test asks only for what the commit claimed
    and fails for a real reason. Only then is it shown.
 4. Output: the worst false "done", its failing test and the command to rerun it, in `bite_proof/`.
+5. `--write-tests` (your own API key, capped by `--budget`), instead of step 3: for each change no test noticed, a
+   fresh worker writes the missing test. Bite keeps it only if it passes twice with the change in and fails with
+   the change taken out, then shows it ready to paste in (in bite_proof/FREE_REPORT.md and the pull request
+   comment; the Action's `write-tests: true` with `anthropic-api-key`).
 
 **What it found on public repos, honestly** (evidence/RECENT.md): 104 fix claims in 11 projects (these runs
 looked at commits made with Claude Code), 4 false "done" shown, all real. The two that matter: the prosemirror-py

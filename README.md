@@ -103,6 +103,25 @@ Options go under `with:`: `args` (extra `bite` options, e.g. `--serious`), `max-
 commit, whether a test noticed the change being taken out, and updates that same comment on later pushes. The
 rerun steps for each flagged commit are on the job's summary page.
 
+### Have Bite write the missing test (opt-in, your own key)
+
+When no test noticed a change, Bite can write that test for you. Add your Anthropic API key as a repository secret
+named `ANTHROPIC_API_KEY`, then:
+
+```yaml
+      - uses: connabyss/bite@v0.5.1
+        with:
+          write-tests: true
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          args: --budget 0.50
+```
+
+For each change no test noticed (3 at most, `--suspects` changes that), a fresh AI worker writes one small test on a
+copy of the project. Bite then runs it itself: it must pass twice with the change in, and fail with the change
+taken out. Only then does it show up in the comment, folded, ready to paste in. Otherwise Bite throws it away and
+says so. `--budget` caps what a run spends ($1 by default). Pull requests from forks don't get secrets, so on those
+Bite runs the free check only. On your own computer: `bite --write-tests`.
+
 ## Bite-proof badge
 
 When every change Bite checked had a test that noticed it, Bite ends with "Bite-proof. Nice work." and prints a

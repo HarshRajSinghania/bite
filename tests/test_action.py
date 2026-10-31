@@ -58,3 +58,11 @@ def test_a_green_comment_keeps_the_check_green(tmp_path):
 def test_a_gap_still_turns_the_check_red(tmp_path):
     r = run_check(tmp_path, "⚠️ Bite: no test noticed 1 change", report=True)
     assert r.returncode == 1 and "isn't guarded" in r.stdout
+
+
+@pytest.mark.skipif(not BASH or os.name == "nt", reason="needs bash (the check runs on Linux)")
+def test_write_tests_without_a_key_runs_the_free_check_only(tmp_path, monkeypatch):
+    monkeypatch.setenv("WRITE", "true")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    r = run_check(tmp_path, "✅ Bite-proof. Nice work.")
+    assert r.returncode == 0 and "no anthropic-api-key" in r.stdout, r.stdout + r.stderr
