@@ -1,0 +1,16 @@
+{
+  "name": "bite",
+  "owner": {
+    "name": "connabyss"
+  },
+  "metadata": {
+    "description": "Bite: checks whether a coding AI's \"fixed\" is actually true."
+  },
+  "plugins": [
+    {
+      "name": "bite",
+      "source": "./plugin",
+      "description": "Checks Claude's \"fixed\" the moment it says it: takes the change out and runs your tests. If none notice, Claude adds the missing test before you see \"fixed!\"."
+    }
+  ]
+}

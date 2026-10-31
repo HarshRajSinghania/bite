@@ -14,6 +14,8 @@ Bite: did your coding agent's recent "done" commits really do what they said?
     bite --since main         only commits that main doesn't have (the pull request check uses this)
     bite --write-tests        after the free check, write the missing test for each change no test noticed
                               (API key, capped by --budget; --suspects sets how many, default 3)
+    bite live                 check the changes since the last commit now (bite live --help: the live check for
+                              coding AIs, and the Claude Code plugin's Stop hook)
     (from a clone without installing: python recent.py, python recent.py --free, ...)
 
 Step 1 (free): for each commit that changed code, the change is taken back out and the tests are run. If they
@@ -364,8 +366,9 @@ def preflight(cfg) -> str:
 
 def take_out(root: Path, c: dict, folder: Path) -> None:
     """Put this commit's code files in the copy back the way they were before it (its tests stay)."""
+    before = c.get("before") or f"{c['sha']}^"  # the live check passes the commit the turn started from
     for rel in c["code"]:
-        old = repo.git(root, "cat-file", "blob", f"{c['sha']}^:{rel}", raw=True)
+        old = repo.git(root, "cat-file", "blob", f"{before}:{rel}", raw=True)
         t = folder / rel
         if old is None and t.suffix == ".py" and t.name != "__init__.py":
             # A file the commit created: deleting it would let Python find an installed copy (pip install -e .)
@@ -1089,8 +1092,27 @@ FLAGS = {"--free", "--all", "--any", "--serious", "--again", "--roast", "--demo"
 VALUED = {"--last": int, "--free-checks": int, "--suspects": int, "--budget": float, "--since": str}
 
 
+def extras(root: Path, cfg) -> list:
+    """The .bite.ini settings only recent.py reads (claim_command, free_test_command) go onto cfg; returns
+    test_covers as a list of globs."""
+    cfg.claim_cmd = cfg.free_cmd = ""
+    ini = Path(os.environ["BITE_CONFIG"]) if os.environ.get("BITE_CONFIG") else root / ".bite.ini"
+    if not ini.is_file():
+        return []
+    import configparser
+    cp = configparser.ConfigParser(interpolation=None)
+    cp.read(ini, encoding="utf-8")
+    kit = cp["kit"] if "kit" in cp else {}
+    cfg.claim_cmd = kit.get("claim_command", "").strip()
+    cfg.free_cmd = kit.get("free_test_command", "").strip()
+    return [g.strip().replace("\\", "/") for g in kit.get("test_covers", "").split(",") if g.strip()]
+
+
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
+    if argv[:1] == ["live"]:  # the live check for coding AIs (live.py): bite live, bite live --hook
+        import live
+        return live.main(argv[1:])
     if "-h" in argv or "--help" in argv:
         print(__doc__.strip())
         return 0
@@ -1128,17 +1150,7 @@ def main(argv=None):
         print(f"Bite: {e}")
         write_comment(root, [], error=str(e))
         return 1
-    cfg.claim_cmd = cfg.free_cmd = ""
-    covers = []
-    ini = Path(os.environ["BITE_CONFIG"]) if os.environ.get("BITE_CONFIG") else root / ".bite.ini"
-    if ini.is_file():
-        import configparser
-        cp = configparser.ConfigParser(interpolation=None)
-        cp.read(ini, encoding="utf-8")
-        kit = cp["kit"] if "kit" in cp else {}
-        cfg.claim_cmd = kit.get("claim_command", "").strip()
-        cfg.free_cmd = kit.get("free_test_command", "").strip()
-        covers = [g.strip().replace("\\", "/") for g in kit.get("test_covers", "").split(",") if g.strip()]
+    covers = extras(root, cfg)
     if not cfg.test_cmd:
         print("Bite: no test command found; set test_command in .bite.ini")
         write_comment(root, [], error="Bite found no test command. Set test_command in .bite.ini.")
