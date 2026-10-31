@@ -68,6 +68,13 @@ python-vcr-tests database recorder that said it recorded every query but kept on
 repos had none: on well-kept code, AI fix claims mostly hold, and Bite stays quiet. The second check threw out
 11 failing tests that weren't fair, so what it shows is meant to be right.
 
+## Live, in Claude Code
+
+`bite live` runs the free check on the changes since the last commit, right away. The Claude Code plugin in this
+repo (`/plugin marketplace add connabyss/bite`, then `/plugin install bite@bite`) runs it each time you finish a turn
+that changed code: if no test notices your change, you're sent back once to add one that fails without it. Treat
+that as the person asking for the test. `/bite` runs it on demand. No key needed.
+
 ## Setup (once your person says yes; they only paste a key, and only for the paid step)
 
 - Python 3.10+ and git. `pipx install bite-check` gives the `bite` command (no venv
@@ -110,5 +117,5 @@ repos had none: on well-kept code, AI fix claims mostly hold, and Bite stays qui
   the commit).
 - CI runs the tests on Linux, Windows and macOS (Python 3.10 and 3.13); all six must pass to merge.
 
-Files: recent.py (the tool), bite.py (engine: settings, test running, safe copies, the command filter that keeps
+Files: recent.py (the tool), live.py (the live check and the Claude Code plugin's hook; the plugin is in plugin/), bite.py (engine: settings, test running, safe copies, the command filter that keeps
 the worker inside its copy), repo.py (git and settings helpers).

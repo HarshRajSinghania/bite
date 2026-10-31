@@ -67,6 +67,38 @@ https://code.claude.com/docs/en/agent-sdk/overview). The commits Bite checks can
 Works with pytest, npm test, cargo test, go test and dotnet test. Settings and limits: [AGENTS.md](https://github.com/connabyss/bite/blob/main/AGENTS.md),
 written so your coding AI (Claude Code, Codex, Cursor, Copilot) can set Bite up for you. To work on Bite itself: clone it, `pip install -e .[test]`, then `python -m pytest`.
 
+## Check Claude's "fixed" live, in Claude Code
+
+Bite can also check the moment Claude says it fixed something, before you read "fixed!". Each time Claude finishes
+a turn that changed code, Bite takes the change back out of a copy of your project and runs your tests. If none of
+them notice, Claude is sent back once to add a test that fails without its change. If it stops again and still no
+test notices, you get a warning instead, so it never goes round in circles. It's the free check: no API key.
+
+In Claude Code, type:
+
+```
+/plugin marketplace add connabyss/bite
+/plugin install bite@bite
+```
+
+and install Bite itself if you haven't (`bite live` is new: until the next release, install it from GitHub):
+
+```
+pipx install git+https://github.com/connabyss/bite
+```
+
+`/bite` checks the changes since your last commit whenever you like. In a trial, Claude fixed a discount and then
+wrote `assert total([50, 50], 10) == 90`. That passes with or without the fix (100 - 10 and 100 × 90% are both
+90), and Bite said so:
+
+```
+Bite ⚠️ the tests that came with this change (test_cart.py) don't notice it: with the change to cart.py taken out,
+they still pass. The "fixed" isn't proven yet.
+```
+
+Without the plugin, run `bite live` yourself after a change, or `bite live --hook` from any tool that runs a
+command when the AI stops (it reads Claude Code's Stop hook JSON).
+
 ## Run it on every pull request
 
 Easiest: [install the bite-check app](https://github.com/apps/bite-check) on the repos you want. Within an hour it

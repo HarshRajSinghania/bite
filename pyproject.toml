@@ -34,7 +34,7 @@ Source = "https://github.com/connabyss/bite"
 Issues = "https://github.com/connabyss/bite/issues"
 
 [tool.setuptools]
-py-modules = ["bite", "recent", "repo"]
+py-modules = ["bite", "live", "recent", "repo"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
