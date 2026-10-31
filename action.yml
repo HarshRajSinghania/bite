@@ -21,7 +21,7 @@ inputs:
     description: For each change no test noticed, have an AI write the missing test and show it in the comment, ready to paste in. Bite keeps it only if it passes with the change and fails without it. Needs anthropic-api-key; spending is capped by --budget in args ($1 by default).
     default: "false"
   anthropic-api-key:
-    description: Your own Anthropic API key, for write-tests only, e.g. ${{ secrets.ANTHROPIC_API_KEY }}. Pull requests from forks don't get secrets, so there Bite runs the free check only.
+    description: Your own Anthropic API key, for write-tests only. Pass your repository secret ANTHROPIC_API_KEY here. Pull requests from forks don't get secrets, so there Bite runs the free check only.
     default: ""
   github-token:
     description: Token for the comment (needs pull-requests write permission).

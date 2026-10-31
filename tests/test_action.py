@@ -66,3 +66,12 @@ def test_write_tests_without_a_key_runs_the_free_check_only(tmp_path, monkeypatc
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     r = run_check(tmp_path, "✅ Bite-proof. Nice work.")
     assert r.returncode == 0 and "no anthropic-api-key" in r.stdout, r.stdout + r.stderr
+
+
+def test_descriptions_hold_no_expressions():
+    # GitHub reads ${{ }} even inside an input's description, and only github.* works in action.yml: one line
+    # mentioning secrets.X there stops the action from loading at all.
+    text = (KIT / "action.yml").read_text(encoding="utf-8")
+    yaml = pytest.importorskip("yaml")
+    assert yaml.safe_load(text)["inputs"]["write-tests"]["default"] == "false"
+    assert not [ln for ln in text.splitlines() if ln.strip().startswith("description:") and "${{" in ln]
