@@ -8,6 +8,7 @@ import os
 import shutil
 import subprocess
 import sys
+import textwrap
 import urllib.parse
 from pathlib import Path
 
@@ -174,16 +175,20 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
 
 @pytest.mark.skipif(not shutil.which("bash") or os.name == "nt", reason="needs bash (the check runs on Linux)")
 def test_python_setup_installs_what_the_project_lists_but_not_the_project(tmp_path):
-    # Rich lists its needs only in pyproject.toml: they get installed, and the project itself doesn't stay installed
+    # Rich lists its needs only in pyproject.toml: they get installed, with its test and dev lists, and the project
+    # itself doesn't stay installed
     script = welcome.workflow("Python").split("if [ -f pyproject.toml ]", 1)[1]
     script = "if [ -f pyproject.toml ]" + script.split("\n      - uses:")[0]
-    script = "\n".join(ln.strip() for ln in script.splitlines())
+    script = textwrap.dedent("          " + script)
     wheels = tmp_path / "wheels"
     wheels.mkdir()
-    make_wheel(wheels, "toydep")
+    for name in ("toydep", "toytest", "toypoetry"):
+        make_wheel(wheels, name)
     proj = tmp_path / "proj"
     proj.mkdir()
     (proj / "pyproject.toml").write_text('[project]\nname = "toyproj"\nversion = "1.0"\ndependencies = ["toydep"]\n'
+                                         '[project.optional-dependencies]\ntest = ["toytest>=1"]\n'
+                                         '[tool.poetry.dev-dependencies]\ntoypoetry = "^1.0"\n'
                                          '[build-system]\nrequires = []\nbuild-backend = "backend"\nbackend-path = ["."]\n')
     (proj / "backend.py").write_text(BACKEND)
     (proj / "test_bot_wheel.py").write_text(inspect.getsource(make_wheel).replace("Path(folder)", "__import__('pathlib').Path(folder)"))
@@ -196,3 +201,5 @@ def test_python_setup_installs_what_the_project_lists_but_not_the_project(tmp_pa
     have = subprocess.run([str(venv / "bin" / "python"), "-m", "pip", "list", "--format=freeze"], env=env,
                           capture_output=True, text=True).stdout
     assert "toydep==1.0" in have and "toyproj" not in have, have
+    # its test and dev lists too (Rich's attrs is a Poetry dev dependency)
+    assert "toytest==1.0" in have and "toypoetry==1.0" in have, have

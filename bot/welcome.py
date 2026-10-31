@@ -47,6 +47,22 @@ SETUP = {
             else
               echo "::warning::Couldn't install what this project lists; add it in the step above."
             fi
+          fi
+          # The test and dev lists in pyproject.toml (standard, dependency groups or Poetry's, which go by name only).
+          if [ -f pyproject.toml ]; then
+          python - <<'EOF'
+          import subprocess, sys, tomllib
+          d = tomllib.load(open("pyproject.toml", "rb"))
+          keys = ("test", "tests", "testing", "dev")
+          extra = d.get("project", {}).get("optional-dependencies", {})
+          groups = d.get("dependency-groups", {})
+          poetry = d.get("tool", {}).get("poetry", {})
+          tables = [poetry.get("dev-dependencies", {})] + [poetry.get("group", {}).get(k, {}).get("dependencies", {}) for k in keys]
+          names = [r for k in keys for r in extra.get(k, []) + groups.get(k, []) if isinstance(r, str)]
+          names += [n for t in tables for n in t if n != "python"]
+          if names and subprocess.run([sys.executable, "-m", "pip", "install", *names]).returncode:
+              print("::warning::Couldn't install this project's test and dev lists; add them in the step above.")
+          EOF
           fi""",
     "JavaScript": """      - uses: actions/setup-node@v4
         with:
