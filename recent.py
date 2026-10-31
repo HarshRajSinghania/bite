@@ -665,7 +665,7 @@ def say(c: dict, newest: str = "") -> tuple[str, str, str]:
             return ("skip", "➖ tests failed here, skipped", "➖ Your tests failed at this commit, so Bite skipped it "
                     "(a later commit may have fixed them).")
         return ("fail", "❌ tests already fail", "❌ Your tests already fail here, so Bite can't ask its question. "
-                "**Next:** fix them first.")
+                f"**Next:** fix them first. If they pass on your own computer, [tell Bite how to run them]({SETUP_LINK}).")
     if u == "no tests ran at this commit":
         return ("none", "⚠️ no tests found", "⚠️ Bite couldn't find any tests to run. **Next:** add one, or "
                 f"[point Bite at your tests]({SETUP_LINK}).")
@@ -776,7 +776,8 @@ def write_comment(root: Path, cs: list, none: str = "", error: str = "", newest:
     elif "fail" in kinds:
         lines += ["### ❌ Bite: your tests already fail", "",
                   "Bite can't ask its question while your tests fail on the newest commit.", "",
-                  "**Next:** fix them first. Bite checks again on your next push."]
+                  "**Next:** fix them first. Bite checks again on your next push. If they pass on your own computer, "
+                  f"Bite may be running them the wrong way: [tell Bite how to run them]({SETUP_LINK})."]
     elif bad:
         one = len(bad) == 1
         lines += [f"### ⚠️ Bite: no test noticed {len(bad)} change{'' if one else 's'}", "",

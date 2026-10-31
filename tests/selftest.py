@@ -518,6 +518,18 @@ older_fails = recent.write_comment(root, [dict(c1, undo="tests fail at this comm
                                    newest=c2["sha"]).read_text(encoding="utf-8")
 check("comment: tests that failed only on an older commit don't decide the verdict",
       f"### {recent.CAT} ✅" in older_fails and "Bite skipped it" in older_fails and "❌" not in older_fails)
+check("comment: tests failing on the newest commit point to how to tell Bite to run them",
+      "tell Bite how to run them" in newest_fails and recent.SETUP_LINK in newest_fails)
+# A test file that's a plain script (it calls sys.exit when loaded) makes pytest crash with exit 3 (bite-kit did).
+with tempfile.TemporaryDirectory() as tmp:
+    proj = Path(tmp)
+    (proj / "tests").mkdir()
+    (proj / "tests" / "test_script.py").write_text("import sys\nsys.exit(0)\n")
+    (proj / "crash.ini").write_text(f"[kit]\ntest_command = \"{Path(sys.executable).as_posix()}\" -m pytest -q -p no:cacheprovider\n")
+    crashed = bite.run_tests(bite.Config(proj / "crash.ini"), proj)
+check(f"tests: pytest crashing on a script-style test file is said in words (got {crashed['why']!r})",
+      not crashed["ok"] and crashed["why"].startswith("pytest crashed while loading your tests") and "(exit 3)" in crashed["why"])
+check("tests: other runners keep the plain exit code", bite.exit_why("npm test", 3) == "exit 3")
 notes["no tests ran"] = recent.write_comment(root, [dict(c1, undo="no tests ran at this commit")], newest=c1["sha"]).read_text(encoding="utf-8")
 check("comment: no tests ran is a warning, not a calm dash", f"### {recent.CAT} ⚠️ Bite: no tests found" in notes["no tests ran"])
 notes["tests fail"] = newest_fails

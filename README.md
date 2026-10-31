@@ -95,7 +95,7 @@ jobs:
       # install what your tests need here, e.g. for Python:
       - uses: actions/setup-python@v5
       - run: python -m pip install pytest -r requirements.txt
-      - uses: connabyss/bite@v0.5.0
+      - uses: connabyss/bite@v0.5.1
 ```
 
 Options go under `with:`: `args` (extra `bite` options, e.g. `--serious`), `max-commits` (default 20),
