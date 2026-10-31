@@ -72,6 +72,11 @@ runs:
           exit "$rc"
         fi
         post_comment
+        # Tests failing on the newest commit mean nothing was checked: the check goes red, like the comment.
+        if [ "$FAIL" = "true" ] && grep -q '^### .*❌' bite_proof/COMMENT.md 2>/dev/null; then
+          echo "::error::Bite: your tests fail on this pull request's newest commit, so Bite couldn't check it (its comment says why)."
+          exit 1
+        fi
         if [ -f bite_proof/FREE_REPORT.md ]; then
           cat bite_proof/FREE_REPORT.md >> "$GITHUB_STEP_SUMMARY"
           if [ "$FAIL" = "true" ]; then

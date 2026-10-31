@@ -686,6 +686,17 @@ def tests_cmd(cfg: Config) -> str:
     return cfg.box_test_cmd if cfg.contain and cfg.box_test_cmd else cfg.test_cmd
 
 
+# pytest's own exit codes, in words: "exit 3" alone tells nobody that pytest never got to the tests.
+PYTEST_EXITS = {2: "pytest stopped before running your tests (a test file failed to load)",
+                3: "pytest crashed while loading your tests (a test file may run code or call sys.exit when it loads)",
+                4: "pytest was given options it doesn't know",
+                5: "pytest found no tests"}
+
+
+def exit_why(cmd: str, rc: int) -> str:
+    return f"{PYTEST_EXITS[rc]} (exit {rc})" if "pytest" in cmd and rc in PYTEST_EXITS else f"exit {rc}"
+
+
 def run_tests(cfg: Config, folder: Path) -> dict:
     cmd = tests_cmd(cfg).replace("{project}", str(folder)).replace("{seed}", SEED[0])
     rc, out = locked_run(cfg, cmd, folder)
@@ -701,7 +712,7 @@ def run_tests(cfg: Config, folder: Path) -> dict:
     else:
         count = auto_count(out)
     ok = rc in cfg.ok_codes and not fails and (count is None or count > 0)
-    why = (f"exit {rc}" if rc else "") or (fails[0][:160] if fails else "") or ("no tests ran" if count == 0 else "")
+    why = (exit_why(cmd, rc) if rc else "") or (fails[0][:160] if fails else "") or ("no tests ran" if count == 0 else "")
     return {"ok": ok, "why": why, "fails": fails, "count": count, "out": out}
 
 

@@ -130,3 +130,11 @@ def test_no_key_stops_with_a_plain_message(monkeypatch):
     monkeypatch.delenv("BITE_APP_KEY", raising=False)
     with pytest.raises(SystemExit, match="bot"):
         welcome.main()
+
+
+def test_the_filled_in_file_uses_the_version_being_released():
+    import re
+    pyproject = (Path(__file__).parent.parent / "pyproject.toml").read_text(encoding="utf-8")
+    readme = (Path(__file__).parent.parent / "README.md").read_text(encoding="utf-8")
+    version = re.search(r'^version = "(.+)"', pyproject, re.M).group(1)
+    assert welcome.VERSION == f"v{version}" and f"uses: connabyss/bite@v{version}" in readme
