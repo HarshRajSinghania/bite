@@ -51,7 +51,11 @@ SETUP = {
           # The test and dev lists in pyproject.toml (standard, dependency groups or Poetry's, which go by name only).
           if [ -f pyproject.toml ]; then
           python - <<'EOF'
-          import subprocess, sys, tomllib
+          import subprocess, sys
+          try:
+              import tomllib
+          except ImportError:  # Python 3.10 or older
+              sys.exit(print("::warning::Reading pyproject.toml's test and dev lists needs Python 3.11 or newer."))
           d = tomllib.load(open("pyproject.toml", "rb"))
           keys = ("test", "tests", "testing", "dev")
           extra = d.get("project", {}).get("optional-dependencies", {})

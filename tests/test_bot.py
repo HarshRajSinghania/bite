@@ -201,5 +201,9 @@ def test_python_setup_installs_what_the_project_lists_but_not_the_project(tmp_pa
     have = subprocess.run([str(venv / "bin" / "python"), "-m", "pip", "list", "--format=freeze"], env=env,
                           capture_output=True, text=True).stdout
     assert "toydep==1.0" in have and "toyproj" not in have, have
-    # its test and dev lists too (Rich's attrs is a Poetry dev dependency)
-    assert "toytest==1.0" in have and "toypoetry==1.0" in have, have
+    # its test and dev lists too (Rich's attrs is a Poetry dev dependency); reading them needs tomllib (3.11+), and
+    # without it the step only warns
+    if sys.version_info >= (3, 11):
+        assert "toytest==1.0" in have and "toypoetry==1.0" in have, have
+    else:
+        assert "needs Python 3.11" in r.stdout
