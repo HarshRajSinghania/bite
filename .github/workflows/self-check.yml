@@ -18,6 +18,7 @@ permissions:
   issues: write
   pull-requests: write
   actions: write
+  statuses: write
 
 concurrency: self-check
 

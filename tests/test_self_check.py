@@ -41,17 +41,49 @@ elif method == "POST" and path.endswith("/pulls"):
     print(json.dumps({"number": 71}))
 '''
 
-REPORT = """# Bite: changes no test noticed
+# A tiny repo like Bite's: a fix in calc.py that no test noticed, and the test Bite wrote for it.
+CALC = "def clamp(x, lo, hi):\n    return min(x, hi)\n"
+FIXED = "def clamp(x, lo, hi):\n    return max(lo, min(x, hi))\n"
+NOTICES = ("import sys\nfrom pathlib import Path\n\nsys.path.insert(0, str(Path(__file__).resolve().parent.parent))\n"
+           "from calc import clamp\n\n\ndef test_low():\n    assert clamp(-5, 0, 9) == 0\n")
+GIT = dict(GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t",
+           GIT_AUTHOR_DATE="2026-01-01T00:00:00Z", GIT_COMMITTER_DATE="2026-01-01T00:00:00Z")
 
-## 1. 1a2b3c4d Say why pytest crashed
+
+def make_repo(work):
+    """Fixed dates and names, so the fix commit's sha is the same every time."""
+    e = dict(os.environ, **GIT)
+    g = lambda *a: subprocess.run(["git", *a], cwd=work, env=e, check=True, capture_output=True, text=True).stdout  # noqa: E731
+    g("init", "-q")
+    (work / "calc.py").write_text(CALC)
+    g("add", "calc.py")
+    g("commit", "-q", "-m", "calc")
+    (work / "calc.py").write_text(FIXED)
+    g("commit", "-q", "-am", "Fix clamp below lo")
+    return g("rev-parse", "HEAD")[:8]
+
+
+def fix_sha():
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        return make_repo(Path(d))
+
+
+S = fix_sha()
+
+REPORT = f"""# Bite: changes no test noticed
+
+## 1. {S} Fix clamp below lo
 
 - What Bite saw: no test noticed it was gone
 """
 
 
-def run(tmp_path, report=REPORT, test=True, existing=False, **env):
+def run(tmp_path, report=REPORT, test=True, existing=False, written=NOTICES, **env):
     work = tmp_path / "work"
-    (work / "bite_proof").mkdir(parents=True)
+    work.mkdir()
+    assert make_repo(work) == S
+    (work / "bite_proof").mkdir()
     if existing:  # an earlier self-check's test, already in the repo under the name Bite uses each time
         (work / "tests").mkdir()
         (work / "tests" / "test_bite_claim.py").write_text("def test_old():\n    pass\n")
@@ -59,7 +91,7 @@ def run(tmp_path, report=REPORT, test=True, existing=False, **env):
         (work / "bite_proof" / "FREE_REPORT.md").write_text(report, encoding="utf-8")
     if test:
         (work / "bite_proof" / "missing_tests" / "tests").mkdir(parents=True)
-        (work / "bite_proof" / "missing_tests" / "tests" / "test_bite_claim.py").write_text("def test_x():\n    pass\n")
+        (work / "bite_proof" / "missing_tests" / "tests" / "test_bite_claim.py").write_text(written)
     fake = tmp_path / "bin"
     fake.mkdir()
     (fake / "gh.py").write_text(FAKE_GH)
@@ -82,8 +114,8 @@ def test_a_gap_opens_an_issue_then_a_pull_request_that_closes_it(tmp_path):
     r, calls = run(tmp_path)
     assert r.returncode == 0, r.stdout + r.stderr
     issue = posted(calls, "/issues")
-    assert "no test noticed" in issue["title"] and "1a2b3c4d Say why pytest crashed" in issue["body"]
-    assert "<!-- bite-self-check: 1a2b3c4d -->" in issue["body"]
+    assert "no test noticed" in issue["title"] and f"{S} Fix clamp below lo" in issue["body"]
+    assert f"<!-- bite-self-check: {S} -->" in issue["body"]
     commit = posted(calls, "/git/commits")
     assert commit["parents"] == ["mainsha"] and "Closes #70" in commit["message"]
     assert posted(calls, "/git/trees")["tree"][0]["path"] == "tests/test_bite_claim.py"
@@ -97,7 +129,7 @@ def test_a_gap_opens_an_issue_then_a_pull_request_that_closes_it(tmp_path):
     assert posted(calls, "/actions/workflows/tests.yml/dispatches") == {"ref": "bite/self-check-70"}
 
 
-OLD = "old\n<!-- bite-self-check: 1a2b3c4d -->\n"
+OLD = f"old\n<!-- bite-self-check: {S} -->\n"
 
 
 def test_a_gap_already_reported_is_not_reported_again(tmp_path):
@@ -153,3 +185,37 @@ def test_a_test_from_an_earlier_self_check_is_not_replaced(tmp_path):
     assert r.returncode == 0, r.stdout + r.stderr
     assert posted(calls, "/git/trees")["tree"][0]["path"] == "tests/test_bite_claim_70.py"
     assert "`tests/test_bite_claim_70.py`" in posted(calls, "/pulls")["body"]
+
+
+def test_bites_own_test_is_held_to_bites_own_question_and_shown_as_a_check(tmp_path):
+    r, calls = run(tmp_path)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert f"fails when {S} is taken out, checked on today's main" in posted(calls, "/pulls")["body"]
+    status = next(b for m, p, b in calls if m == "POST" and "/statuses/" in p)
+    assert status["state"] == "success" and status["context"] == "Bite / own test" and S in status["description"]
+    assert ["POST", "repos/o/bite/statuses/newcommit"] in [[m, p] for m, p, b in calls]
+
+
+def test_a_test_that_doesnt_notice_the_change_gets_no_pull_request(tmp_path):
+    r, calls = run(tmp_path, written="def test_nothing():\n    assert True\n")
+    assert r.returncode == 0 and "doesn't notice" in r.stdout and "still passes with the change taken out" in r.stdout
+    assert "repos/o/bite/issues" in [p for m, p, b in calls if m == "POST"]  # the issue still stands
+    assert not [c for c in calls if c[1].endswith("/pulls") and c[0] == "POST"]
+
+
+def test_when_the_code_has_moved_on_it_asks_at_the_gaps_own_commit(tmp_path):
+    work = tmp_path / "w"
+    work.mkdir()
+    make_repo(work)
+    e = dict(os.environ, **GIT)
+    (work / "calc.py").write_text("def clamp(x, lo, hi):\n    # keep x in [lo, hi]\n    return max(lo, min(x, hi))\n")
+    subprocess.run(["git", "commit", "-q", "-am", "comment"], cwd=work, env=e, check=True)
+    sys.path.insert(0, str(KIT / "bot"))
+    import self_check
+    cwd = os.getcwd()
+    os.chdir(work)
+    try:
+        assert self_check.notices(S, "test_bite_claim.py", NOTICES) == (True, "its own commit (the code has changed since)")
+        assert self_check.notices(S, "test_bite_claim.py", "def test_nothing():\n    pass\n")[0] is False
+    finally:
+        os.chdir(cwd)
