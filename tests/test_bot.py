@@ -2,7 +2,9 @@
 
 import base64
 import importlib.util
+import inspect
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -146,3 +148,51 @@ def test_the_filled_in_file_uses_the_version_being_released():
     readme = (Path(__file__).parent.parent / "README.md").read_text(encoding="utf-8")
     version = re.search(r'^version = "(.+)"', pyproject, re.M).group(1)
     assert welcome.VERSION == f"v{version}" and f"uses: connabyss/bite@v{version}" in readme
+
+
+def make_wheel(folder, name, requires=()):
+    """A minimal wheel built by hand, so the test needs no network and no build tools."""
+    import zipfile
+    meta = f"Metadata-Version: 2.1\nName: {name}\nVersion: 1.0\n" + "".join(f"Requires-Dist: {r}\n" for r in requires)
+    path = Path(folder) / f"{name}-1.0-py3-none-any.whl"
+    with zipfile.ZipFile(path, "w") as z:
+        z.writestr(f"{name}.py", "")
+        z.writestr(f"{name}-1.0.dist-info/METADATA", meta)
+        z.writestr(f"{name}-1.0.dist-info/WHEEL", "Wheel-Version: 1.0\nGenerator: test\nRoot-Is-Purelib: true\nTag: py3-none-any\n")
+        z.writestr(f"{name}-1.0.dist-info/RECORD", "")
+    return path.name
+
+
+BACKEND = '''
+import os, shutil, sys
+sys.path.insert(0, os.path.dirname(__file__))
+from test_bot_wheel import make_wheel
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    return make_wheel(wheel_directory, "toyproj", ["toydep"])
+'''
+
+
+@pytest.mark.skipif(not shutil.which("bash") or os.name == "nt", reason="needs bash (the check runs on Linux)")
+def test_python_setup_installs_what_the_project_lists_but_not_the_project(tmp_path):
+    # Rich lists its needs only in pyproject.toml: they get installed, and the project itself doesn't stay installed
+    script = welcome.workflow("Python").split("if [ -f pyproject.toml ]", 1)[1]
+    script = "if [ -f pyproject.toml ]" + script.split("\n      - uses:")[0]
+    script = "\n".join(ln.strip() for ln in script.splitlines())
+    wheels = tmp_path / "wheels"
+    wheels.mkdir()
+    make_wheel(wheels, "toydep")
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    (proj / "pyproject.toml").write_text('[project]\nname = "toyproj"\nversion = "1.0"\ndependencies = ["toydep"]\n'
+                                         '[build-system]\nrequires = []\nbuild-backend = "backend"\nbackend-path = ["."]\n')
+    (proj / "backend.py").write_text(BACKEND)
+    (proj / "test_bot_wheel.py").write_text(inspect.getsource(make_wheel).replace("Path(folder)", "__import__('pathlib').Path(folder)"))
+    venv = tmp_path / "venv"
+    subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True)
+    env = dict(os.environ, PATH=f"{venv / 'bin'}{os.pathsep}{os.environ['PATH']}", PIP_NO_INDEX="1",
+               PIP_FIND_LINKS=str(wheels), PIP_DISABLE_PIP_VERSION_CHECK="1")
+    r = subprocess.run(["bash", "-e", "-c", script], cwd=proj, env=env, capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr
+    have = subprocess.run([str(venv / "bin" / "python"), "-m", "pip", "list", "--format=freeze"], env=env,
+                          capture_output=True, text=True).stdout
+    assert "toydep==1.0" in have and "toyproj" not in have, have

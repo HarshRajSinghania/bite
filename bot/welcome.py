@@ -30,7 +30,8 @@ MAX_REPOS = 10
 API = "https://api.github.com"
 
 # What each language needs installed before its tests run. Bite installs itself; don't install the project as a
-# package (pip install -e .), or every copy Bite makes would import this checkout's code instead of its own.
+# package (pip install -e .), or every copy Bite makes would import this checkout's code instead of its own. The Python
+# step installs what the project lists (pyproject.toml or setup.py), then uninstalls the project itself.
 SETUP = {
     "Python": """      - uses: actions/setup-python@v5
         with:
@@ -38,7 +39,15 @@ SETUP = {
       # Add what your tests need here.
       - run: |
           python -m pip install pytest
-          if [ -f requirements.txt ]; then python -m pip install -r requirements.txt; fi""",
+          if [ -f requirements.txt ]; then python -m pip install -r requirements.txt; fi
+          # What pyproject.toml or setup.py lists, then the project itself comes out again.
+          if [ -f pyproject.toml ] || [ -f setup.py ]; then
+            if python -m pip install --report /tmp/deps.json .; then
+              python -c "import json; print(*[i['metadata']['name'] for i in json.load(open('/tmp/deps.json'))['install'] if i.get('is_direct')])" | xargs -r python -m pip uninstall -y
+            else
+              echo "::warning::Couldn't install what this project lists; add it in the step above."
+            fi
+          fi""",
     "JavaScript": """      - uses: actions/setup-node@v4
         with:
           node-version: 22
