@@ -70,7 +70,7 @@ def load_cfg(root: Path):
     if (root / "node_modules").is_dir():
         # Node looks for node_modules in the folders above a file: a copy made inside node_modules/ finds the
         # project's packages without copying them (node_modules itself is left out of every copy).
-        tmp = root / "node_modules" / ".bite_tmp"
+        tmp = root / "node_modules" / "bite_tmp"
         tmp.mkdir(exist_ok=True)
         tempfile.tempdir = str(tmp)
     return cfg
