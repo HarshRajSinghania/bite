@@ -30,7 +30,8 @@ MAX_REPOS = 10
 API = "https://api.github.com"
 
 # What each language needs installed before its tests run. Bite installs itself; don't install the project as a
-# package (pip install -e .), or every copy Bite makes would import this checkout's code instead of its own.
+# package (pip install -e .), or every copy Bite makes would import this checkout's code instead of its own. The Python
+# step installs what the project lists (pyproject.toml or setup.py), then uninstalls the project itself.
 SETUP = {
     "Python": """      - uses: actions/setup-python@v5
         with:
@@ -38,7 +39,35 @@ SETUP = {
       # Add what your tests need here.
       - run: |
           python -m pip install pytest
-          if [ -f requirements.txt ]; then python -m pip install -r requirements.txt; fi""",
+          if [ -f requirements.txt ]; then python -m pip install -r requirements.txt; fi
+          # What pyproject.toml or setup.py lists, then the project itself comes out again.
+          if [ -f pyproject.toml ] || [ -f setup.py ]; then
+            if python -m pip install --report /tmp/deps.json .; then
+              python -c "import json; print(*[i['metadata']['name'] for i in json.load(open('/tmp/deps.json'))['install'] if i.get('is_direct')])" | xargs -r python -m pip uninstall -y
+            else
+              echo "::warning::Couldn't install what this project lists; add it in the step above."
+            fi
+          fi
+          # The test and dev lists in pyproject.toml (standard, dependency groups or Poetry's, which go by name only).
+          if [ -f pyproject.toml ]; then
+          python - <<'EOF'
+          import subprocess, sys
+          try:
+              import tomllib
+          except ImportError:  # Python 3.10 or older
+              sys.exit(print("::warning::Reading pyproject.toml's test and dev lists needs Python 3.11 or newer."))
+          d = tomllib.load(open("pyproject.toml", "rb"))
+          keys = ("test", "tests", "testing", "dev")
+          extra = d.get("project", {}).get("optional-dependencies", {})
+          groups = d.get("dependency-groups", {})
+          poetry = d.get("tool", {}).get("poetry", {})
+          tables = [poetry.get("dev-dependencies", {})] + [poetry.get("group", {}).get(k, {}).get("dependencies", {}) for k in keys]
+          names = [r for k in keys for r in extra.get(k, []) + groups.get(k, []) if isinstance(r, str)]
+          names += [n for t in tables for n in t if n != "python"]
+          if names and subprocess.run([sys.executable, "-m", "pip", "install", *names]).returncode:
+              print("::warning::Couldn't install this project's test and dev lists; add them in the step above.")
+          EOF
+          fi""",
     "JavaScript": """      - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -81,17 +110,24 @@ jobs:
 """
 
 
+def language(repo):
+    """The repo's main language. A new repo or a fresh fork has none yet (GitHub works it out later), so guess
+    Python, Bite's most common case, rather than leave the owner to write the setup themselves."""
+    return repo.get("language") or "Python"
+
+
 def add_link(repo):
     """GitHub's new-file page for this repo, with .github/workflows/bite.yml already filled in."""
-    query = urllib.parse.urlencode({"filename": ".github/workflows/bite.yml", "value": workflow(repo.get("language"))},
+    query = urllib.parse.urlencode({"filename": ".github/workflows/bite.yml", "value": workflow(language(repo))},
                                    quote_via=urllib.parse.quote)
     return f"https://github.com/{repo['full_name']}/new/{urllib.parse.quote(repo['default_branch'])}?{query}"
 
 
 def issue_body(repo):
-    lang = repo.get("language")
-    setup_note = (f"The file installs what {lang} tests usually need. If your tests need more, add it in the step "
-                  "marked \"Add what your tests need here\" before you commit."
+    lang = language(repo)
+    setup_note = ((f"The file installs what {lang} tests usually need. " if repo.get("language") else
+                   "GitHub hasn't worked out this repo's language yet, so the file assumes Python tests. ")
+                  + "If your tests need more, add it in the step marked \"Add what your tests need here\" before you commit."
                   if lang in SETUP else
                   "Bite couldn't tell how your tests run, so add your setup in the step marked in the file before "
                   "you commit.")
@@ -183,7 +219,7 @@ def run(key_pem, dry_run):
                 if not wanted(repo) or welcomed(repo, token):
                     continue
                 if dry_run:
-                    print(f"{name}: would open the welcome issue ({repo.get('language')})")
+                    print(f"{name}: would open the welcome issue ({language(repo)})")
                     continue
                 call("POST", f"/repos/{name}/issues", token,
                      {"title": "Add Bite's free check (one click)", "body": issue_body(repo)})

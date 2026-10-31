@@ -2,10 +2,13 @@
 
 import base64
 import importlib.util
+import inspect
 import json
+import os
 import shutil
 import subprocess
 import sys
+import textwrap
 import urllib.parse
 from pathlib import Path
 
@@ -32,8 +35,16 @@ def test_link_fills_in_the_workflow_for_the_repos_language():
 
 
 def test_unknown_language_gets_the_setup_note():
-    assert welcome.OTHER in welcome.workflow(None)
+    assert welcome.OTHER in welcome.workflow("Haskell")
     assert "couldn't tell how your tests run" in welcome.issue_body(repo(language="Haskell"))
+
+
+def test_a_repo_with_no_language_yet_gets_the_python_setup():
+    # a fresh fork of Rich had no language yet, so its owner got the generic file and had to write the setup
+    fresh = repo(language=None)
+    value = urllib.parse.parse_qs(urllib.parse.urlsplit(welcome.add_link(fresh)).query)["value"][0]
+    assert "actions/setup-python" in value
+    assert "assumes Python tests" in welcome.issue_body(fresh)
     assert "actions/setup-node" in welcome.workflow("TypeScript")
 
 
@@ -138,3 +149,61 @@ def test_the_filled_in_file_uses_the_version_being_released():
     readme = (Path(__file__).parent.parent / "README.md").read_text(encoding="utf-8")
     version = re.search(r'^version = "(.+)"', pyproject, re.M).group(1)
     assert welcome.VERSION == f"v{version}" and f"uses: connabyss/bite@v{version}" in readme
+
+
+def make_wheel(folder, name, requires=()):
+    """A minimal wheel built by hand, so the test needs no network and no build tools."""
+    import zipfile
+    meta = f"Metadata-Version: 2.1\nName: {name}\nVersion: 1.0\n" + "".join(f"Requires-Dist: {r}\n" for r in requires)
+    path = Path(folder) / f"{name}-1.0-py3-none-any.whl"
+    with zipfile.ZipFile(path, "w") as z:
+        z.writestr(f"{name}.py", "")
+        z.writestr(f"{name}-1.0.dist-info/METADATA", meta)
+        z.writestr(f"{name}-1.0.dist-info/WHEEL", "Wheel-Version: 1.0\nGenerator: test\nRoot-Is-Purelib: true\nTag: py3-none-any\n")
+        z.writestr(f"{name}-1.0.dist-info/RECORD", "")
+    return path.name
+
+
+BACKEND = '''
+import os, shutil, sys
+sys.path.insert(0, os.path.dirname(__file__))
+from test_bot_wheel import make_wheel
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    return make_wheel(wheel_directory, "toyproj", ["toydep"])
+'''
+
+
+@pytest.mark.skipif(not shutil.which("bash") or os.name == "nt", reason="needs bash (the check runs on Linux)")
+def test_python_setup_installs_what_the_project_lists_but_not_the_project(tmp_path):
+    # Rich lists its needs only in pyproject.toml: they get installed, with its test and dev lists, and the project
+    # itself doesn't stay installed
+    script = welcome.workflow("Python").split("if [ -f pyproject.toml ]", 1)[1]
+    script = "if [ -f pyproject.toml ]" + script.split("\n      - uses:")[0]
+    script = textwrap.dedent("          " + script)
+    wheels = tmp_path / "wheels"
+    wheels.mkdir()
+    for name in ("toydep", "toytest", "toypoetry"):
+        make_wheel(wheels, name)
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    (proj / "pyproject.toml").write_text('[project]\nname = "toyproj"\nversion = "1.0"\ndependencies = ["toydep"]\n'
+                                         '[project.optional-dependencies]\ntest = ["toytest>=1"]\n'
+                                         '[tool.poetry.dev-dependencies]\ntoypoetry = "^1.0"\n'
+                                         '[build-system]\nrequires = []\nbuild-backend = "backend"\nbackend-path = ["."]\n')
+    (proj / "backend.py").write_text(BACKEND)
+    (proj / "test_bot_wheel.py").write_text(inspect.getsource(make_wheel).replace("Path(folder)", "__import__('pathlib').Path(folder)"))
+    venv = tmp_path / "venv"
+    subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True)
+    env = dict(os.environ, PATH=f"{venv / 'bin'}{os.pathsep}{os.environ['PATH']}", PIP_NO_INDEX="1",
+               PIP_FIND_LINKS=str(wheels), PIP_DISABLE_PIP_VERSION_CHECK="1")
+    r = subprocess.run(["bash", "-e", "-c", script], cwd=proj, env=env, capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr
+    have = subprocess.run([str(venv / "bin" / "python"), "-m", "pip", "list", "--format=freeze"], env=env,
+                          capture_output=True, text=True).stdout
+    assert "toydep==1.0" in have and "toyproj" not in have, have
+    # its test and dev lists too (Rich's attrs is a Poetry dev dependency); reading them needs tomllib (3.11+), and
+    # without it the step only warns
+    if sys.version_info >= (3, 11):
+        assert "toytest==1.0" in have and "toypoetry==1.0" in have, have
+    else:
+        assert "needs Python 3.11" in r.stdout
