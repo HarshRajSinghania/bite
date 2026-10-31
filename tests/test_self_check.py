@@ -49,9 +49,12 @@ REPORT = """# Bite: changes no test noticed
 """
 
 
-def run(tmp_path, report=REPORT, test=True, **env):
+def run(tmp_path, report=REPORT, test=True, existing=False, **env):
     work = tmp_path / "work"
     (work / "bite_proof").mkdir(parents=True)
+    if existing:  # an earlier self-check's test, already in the repo under the name Bite uses each time
+        (work / "tests").mkdir()
+        (work / "tests" / "test_bite_claim.py").write_text("def test_old():\n    pass\n")
     if report:
         (work / "bite_proof" / "FREE_REPORT.md").write_text(report, encoding="utf-8")
     if test:
@@ -143,3 +146,10 @@ def test_when_the_pull_request_is_refused_the_issue_still_stands(tmp_path):
     r, calls = run(tmp_path, GH_FAIL="POST repos/o/bite/pulls")
     assert r.returncode == 0 and "Bite opened issue #70" in r.stdout
     assert "Allow GitHub Actions to create and approve pull requests" in r.stdout
+
+
+def test_a_test_from_an_earlier_self_check_is_not_replaced(tmp_path):
+    r, calls = run(tmp_path, existing=True)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert posted(calls, "/git/trees")["tree"][0]["path"] == "tests/test_bite_claim_70.py"
+    assert "`tests/test_bite_claim_70.py`" in posted(calls, "/pulls")["body"]
