@@ -34,4 +34,5 @@ only if it fails with the change taken out, and opens a pull request into `main`
 - It uses the workflow's own token, never the app's key. It needs Settings, Actions, General: "Allow GitHub Actions to
   create and approve pull requests".
 - GitHub doesn't start checks on a pull request a workflow opened, so `self_check.py` starts the tests workflow on it.
-- Each gap is reported once, even after its issue is closed. No gap: nothing opened, and nothing spent.
+- Each gap is reported once, even after its issue is closed. While its issue is still open, a later run that writes
+  the test (say `ANTHROPIC_API_KEY` was added since) opens the pull request that closes it. No gap: nothing opened, and nothing spent.
