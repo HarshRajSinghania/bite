@@ -141,6 +141,51 @@ check("test that doesn't load is not a finding", "FALSE" not in out and "didn't 
 rc, out = run(root, ["--free"], fake_worker())
 check("--free spends nothing and tests no claims", "FALSE" not in out and "$0.00" in out)
 
+# --write-tests: for a change no test noticed, a worker writes the missing test. Bite keeps it only if it passes
+# with the change in and fails with the change taken out, and shows it in the pull request comment.
+GUARD_TEST = ("import unittest\nfrom calc import clamp\n\nclass G(unittest.TestCase):\n"
+              "    def test_low(self):\n        self.assertEqual(clamp(-5, 0, 9), 0)\n")
+
+
+def fake_guard(test=GUARD_TEST):
+    def w(cfg, folder, c, diff, budget):
+        (folder / "test_bite_claim.py").write_text(test)
+        return {"test_file": "test_bite_claim.py", "guards": "clamp lifts values below lo up to lo"}
+    return w
+
+
+def no_claim_worker(*a):
+    raise AssertionError("--write-tests must not test claims")
+
+
+real_guard = recent.guard_worker
+try:
+    recent.guard_worker = fake_guard()
+    rc, out = run(root, ["--write-tests"], no_claim_worker)
+    comment = (root / "bite_proof" / "COMMENT.md").read_text(encoding="utf-8")
+    report = (root / "bite_proof" / "FREE_REPORT.md").read_text(encoding="utf-8")
+    check("--write-tests: a test that passes with the change and fails without it is kept",
+          "wrote one: passes with the change, fails without it" in out and "FALSE" not in out)
+    check("--write-tests: the pull request comment shows the test, ready to paste in",
+          "🧪 The missing test" in comment and "clamp(-5, 0, 9)" in comment and "~~~~python" in comment
+          and "Bite wrote below (🧪) for 1 of them" in comment and "paste in the test Bite wrote (🧪 below)" in comment)
+    check("--write-tests: the report shows how it failed without the change, and the test is saved",
+          "failed like this" in report and any(p.name.endswith("_test_bite_claim.py") for p in (root / "bite_proof").iterdir()))
+    recent.guard_worker = fake_guard(GUARD_TEST.replace("clamp(-5, 0, 9), 0", "clamp(5, 0, 9), 5"))
+    rc, out = run(root, ["--write-tests"], no_claim_worker)
+    comment = (root / "bite_proof" / "COMMENT.md").read_text(encoding="utf-8")
+    check("--write-tests: a test that passes without the change too is thrown away",
+          "passed without the change too" in out and "🧪" not in comment and "add a test that fails without it" in comment)
+    recent.guard_worker = fake_guard(GUARD_TEST.replace("clamp(-5, 0, 9), 0", "clamp(50, 0, 9), 9"))
+    rc, out = run(root, ["--write-tests"], no_claim_worker)
+    check("--write-tests: a test that fails with the change in is thrown away",
+          "failed with the change in" in out and "🧪" not in (root / "bite_proof" / "COMMENT.md").read_text(encoding="utf-8"))
+    recent.guard_worker = fake_guard()
+    rc, out = run(root, ["--free"], no_claim_worker)
+    check("--free alone writes no test", "writing the missing test" not in out)
+finally:
+    recent.guard_worker = real_guard
+
 rc, out = run(root, ["--serious"], fake_worker())
 check("--serious skips claims that aren't about data, money, logins, security or crashes",
       "FALSE" not in out and "testing the claim" not in out and "Nothing serious to check" in out)

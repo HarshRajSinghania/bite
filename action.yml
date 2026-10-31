@@ -17,6 +17,12 @@ inputs:
   comment:
     description: Post one comment on the pull request with the result per commit, and update it on later pushes.
     default: "true"
+  write-tests:
+    description: For each change no test noticed, have an AI write the missing test and show it in the comment, ready to paste in. Bite keeps it only if it passes with the change and fails without it. Needs anthropic-api-key; spending is capped by --budget in args ($1 by default).
+    default: "false"
+  anthropic-api-key:
+    description: Your own Anthropic API key, for write-tests only. Pass your repository secret ANTHROPIC_API_KEY here. Pull requests from forks don't get secrets, so there Bite runs the free check only.
+    default: ""
   github-token:
     description: Token for the comment (needs pull-requests write permission).
     default: ${{ github.token }}
@@ -37,6 +43,8 @@ runs:
         COMMENT: ${{ inputs.comment }}
         GH_TOKEN: ${{ inputs.github-token }}
         PR: ${{ github.event.pull_request.number }}
+        WRITE: ${{ inputs.write-tests }}
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
       run: |
         post_comment() {
           [ "$COMMENT" = "true" ] || return 0
@@ -65,6 +73,12 @@ runs:
         export BITE_CHECKED_COMMITS=$n
         echo "This pull request has $n commit(s) to check."
         rm -f bite_proof/FREE_REPORT.md bite_proof/COMMENT.md
+        if [ "$WRITE" = "true" ] && [ -n "$ANTHROPIC_API_KEY" ]; then
+          pipx inject bite-check claude-agent-sdk > /dev/null  # the writing step's package
+          ARGS="$ARGS --write-tests"
+        elif [ "$WRITE" = "true" ]; then
+          echo "::warning::Bite: write-tests is on but there's no anthropic-api-key (pull requests from forks don't get secrets), so this run is the free check only."
+        fi
         rc=0
         bite --free --since "$BASE" --last "$n" --free-checks "$n" $ARGS || rc=$?
         if [ "$rc" -ne 0 ]; then
