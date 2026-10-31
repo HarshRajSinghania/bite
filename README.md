@@ -69,7 +69,11 @@ written so your coding AI (Claude Code, Codex, Cursor, Copilot) can set Bite up 
 
 ## Run it on every pull request
 
-Add this file to your repo as `.github/workflows/bite.yml`. On each pull request it runs the free check on that
+Easiest: [install the bite-check app](https://github.com/apps/bite-check) on the repos you want. Within an hour it
+opens one issue there with an "Add Bite" link that fills in the file below for you; you read it and click
+**Commit changes**. The app can only open issues: it can't read or change your code or workflows.
+
+Or add this file to your repo yourself as `.github/workflows/bite.yml`. On each pull request it runs the free check on that
 pull request's commits and shows a pass or fail check next to your other CI. It fails when a commit's change
 can be taken back out and your tests still pass. No key, no cost. It's also listed on the GitHub Marketplace as
 [Bite free check](https://github.com/marketplace/actions/bite-free-check).
