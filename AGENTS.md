@@ -56,8 +56,8 @@ bite --free
    and fails for a real reason. Only then is it shown.
 4. Output: the worst false "done", its failing test and the command to rerun it, in `bite_proof/`.
 5. `--write-tests` (your own API key, capped by `--budget`), instead of step 3: for each change no test noticed, a
-   fresh worker writes the missing test. Bite keeps it only if it passes twice with the change in and fails with
-   the change taken out, then shows it ready to paste in (in bite_proof/FREE_REPORT.md and the pull request
+   fresh worker writes the missing test. Bite keeps it only if it passes twice with the change in, fails with
+   the change taken out, and a second fresh check calls it fair, then shows it ready to paste in (in bite_proof/FREE_REPORT.md and the pull request
    comment; the Action's `write-tests: true` with `anthropic-api-key`). The Action also offers each kept test as a
    download (bite-missing-tests), and with `open-pr: true` opens a pull request with them into the checked branch.
 

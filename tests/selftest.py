@@ -158,7 +158,8 @@ def no_claim_worker(*a):
     raise AssertionError("--write-tests must not test claims")
 
 
-real_guard = recent.guard_worker
+real_guard, real_guard_judge = recent.guard_worker, recent.guard_judge
+recent.guard_judge = lambda cfg, c, diff, test, fail: {"verdict": "FAIR", "why": "it tests the low clamp"}
 try:
     recent.guard_worker = fake_guard()
     rc, out = run(root, ["--write-tests"], no_claim_worker)
@@ -194,11 +195,20 @@ try:
     rc, out = run(root, ["--write-tests"], no_claim_worker)
     check("--write-tests: a test that fails with the change in is thrown away",
           "failed with the change in" in out and "🧪" not in (root / "bite_proof" / "COMMENT.md").read_text(encoding="utf-8"))
+    # The same bar as a claim test: a second fresh check must call the written test fair, or it isn't kept.
     recent.guard_worker = fake_guard()
+    seen = []
+    recent.guard_judge = lambda cfg, c, diff, test, fail: seen.append(fail) or {"verdict": "NOT", "why": "it tests a typo"}
+    rc, out = run(root, ["--write-tests"], no_claim_worker)
+    check("--write-tests: a test the second check doesn't call fair is thrown away",
+          len(seen) == 1 and "clamp" in seen[0] and "second check didn't call its test fair (it tests a typo)" in out
+          and "🧪" not in (root / "bite_proof" / "COMMENT.md").read_text(encoding="utf-8")
+          and not (root / "bite_proof" / "missing_tests").exists())
+    recent.guard_judge = lambda cfg, c, diff, test, fail: {"verdict": "FAIR", "why": "it tests the low clamp"}
     rc, out = run(root, ["--free"], no_claim_worker)
     check("--free alone writes no test", "writing the missing test" not in out)
 finally:
-    recent.guard_worker = real_guard
+    recent.guard_worker, recent.guard_judge = real_guard, real_guard_judge
 
 rc, out = run(root, ["--serious"], fake_worker())
 check("--serious skips claims that aren't about data, money, logins, security or crashes",

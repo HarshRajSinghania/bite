@@ -30,8 +30,8 @@ only for what the commit claimed and fails for a real reason. Only then is it sh
 Results are written to bite_proof/ in the repo: report.html (one page to open in a browser), and each
 failing test plus the command that runs it.
 --write-tests (API key, capped by --budget): for each change no test noticed, a fresh worker writes the test that's
-missing, on a copy at that commit. Bite runs it itself and keeps it only if it passes twice with the change in and
-fails with the change taken out. It's shown ready to paste in (and in the pull request comment). Instead of step 2.
+missing, on a copy at that commit. Bite runs it itself and keeps it only if it passes twice with the change in,
+fails with the change taken out, and a second fresh check calls it fair. It's shown ready to paste in (and in the pull request comment). Instead of step 2.
 Settings: .bite.ini in the repo (optional; first line [kit], then test_command = ...). claim_command runs one
 test file ({file}); without it Bite adds the file to test_command (for dotnet test it adds a --filter instead).
 test_covers = the paths the test command can reach (globs, comma-separated, e.g. Assets/Sim/*, tests/*): commits
@@ -668,6 +668,44 @@ Rules:
   {"test_file": "<path relative to the project>", "guards": "<the words that finish 'It checks that ...'>"}"""
 
 
+GUARD_JUDGE_PROMPT = """A commit made this change to the code:
+---
+{msg}
+---
+Its diff (code files):
+---
+{diff}
+---
+No test noticed when the change was taken out. A checker wrote this test of it:
+---
+{test}
+---
+It passes with the change in. With the change taken out, it fails like this:
+---
+{fail}
+---
+Answer strictly. Is this a fair test of what the change does (it tests only this change, through the code's
+normal way in, and asks for nothing the change and its message don't evidently mean), and does it fail because
+the change's behaviour is gone (not because of a wrong API, a typo, or a detail nobody relies on)?
+Reply with one line of JSON only: {{"verdict": "FAIR" or "NOT", "why": "<one sentence>"}}"""
+
+
+def guard_judge(cfg, c: dict, diff: str, test: str, fail: str) -> dict:
+    """The second check on a test --write-tests wrote, the same bar as a claim test's: a fresh model with no tools."""
+    from claude_agent_sdk import ClaudeAgentOptions
+
+    async def nothing(*a):
+        from claude_agent_sdk import PermissionResultDeny
+        return PermissionResultDeny(message="No tools: answer from what you were given.")
+    opts = ClaudeAgentOptions(model=cfg.judge_model, max_turns=2, max_budget_usd=cfg.judge_budget, allowed_tools=[],
+                              can_use_tool=nothing, permission_mode="default", setting_sources=[],
+                              env={"ANTHROPIC_API_KEY": bite.load_key()},
+                              system_prompt="You check another checker's work. Default to NOT when unsure.")
+    msg = f"{c['subject']}\n\n{c['body']}"[:3000]
+    text, _ = asyncio.run(_agent(opts, GUARD_JUDGE_PROMPT.format(msg=msg, diff=diff[:8000], test=test[:4000], fail=fail[:3000])))
+    return last_json(text)
+
+
 def guard_worker(cfg, folder: Path, c: dict, diff: str, budget: float) -> dict:
     from claude_agent_sdk import ClaudeAgentOptions
     opts = ClaudeAgentOptions(cwd=str(folder), model=cfg.model, system_prompt=GUARD_SYSTEM, max_turns=cfg.max_turns,
@@ -680,8 +718,8 @@ def guard_worker(cfg, folder: Path, c: dict, diff: str, budget: float) -> dict:
 
 
 def try_guard(root: Path, c: dict, cfg, budget: float) -> dict:
-    """A worker writes the missing test; Bite keeps it only if it passes twice with the change in and fails with
-    the change taken out (a real failure, not a test that can't load)."""
+    """A worker writes the missing test; Bite keeps it only if it passes twice with the change in, fails with the
+    change taken out (a real failure, not a test that can't load), and a second fresh check calls it fair."""
     res = {"sha": c["sha"], "status": "no test written"}
     diff = repo.git(root, "diff", f"{c['sha']}^", c["sha"], "--", *c["code"]) or ""
     folder = export(root, c["sha"], cfg)
@@ -716,7 +754,13 @@ def try_guard(root: Path, c: dict, cfg, budget: float) -> dict:
     elif rc is None or bite.load_failure(out):
         res["status"] = "its test couldn't load without the change"
     else:
-        res.update(status="WRITTEN", fail=repo.failure_excerpt(out, 15))
+        fail = repo.failure_excerpt(out, 15)
+        v = guard_judge(cfg, c, diff, res["test"], fail)
+        res["judge"] = v
+        if (v.get("verdict") or "").upper() == "FAIR":
+            res.update(status="WRITTEN", fail=fail)
+        else:
+            res["status"] = "a second check didn't call its test fair" + (f" ({v['why'].rstrip('.')})" if v.get("why") else "")
     return res
 
 
