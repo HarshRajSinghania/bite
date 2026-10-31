@@ -478,6 +478,14 @@ class NetCfg:
 cmd = recent.claim_command(NetCfg, "tests/Game.Tests/BiteClaimTests.cs")
 check("dotnet: claim test picked by --filter, not by file path",
       cmd == 'dotnet test Game.sln -v q --filter "FullyQualifiedName~BiteClaim"')
+class GoCfg:
+    claim_cmd, contain, box_test_cmd = "", "", ""
+    test_cmd = "go test -count=1 ./..."
+
+
+check("go test: the claim test runs as its package (go refuses ./... next to a file: 'setup failed')",
+      [recent.claim_command(GoCfg, r) for r in ("middleware/compress_bite_claim_test.go", "bite_claim_test.go")]
+      == ["go test -count=1 ./middleware", "go test -count=1 ./."])
 check("dotnet: a C# build error is a load failure, not a finding",
       bite.load_failure("Calc.cs(3,5): error CS0103: The name 'x' does not exist"))
 
