@@ -24,7 +24,9 @@ if fail and fail in f"{method} {path}":
     print("HTTP 403: GitHub Actions is not permitted to create or approve pull requests.")
     sys.exit(1)
 if method == "GET" and "/issues?" in path:
-    print(json.dumps([{"body": b} for b in json.loads(os.environ.get("GH_ISSUES", "[]"))]))
+    print(json.dumps(json.loads(os.environ.get("GH_ISSUES", "[]"))))
+elif method == "GET" and "/pulls?" in path:
+    print(os.environ.get("GH_PULLS", "[]"))
 elif method == "POST" and path.endswith("/issues"):
     print(json.dumps({"number": 70}))
 elif path.endswith("/git/commits/mainsha"):
@@ -92,9 +94,36 @@ def test_a_gap_opens_an_issue_then_a_pull_request_that_closes_it(tmp_path):
     assert posted(calls, "/actions/workflows/tests.yml/dispatches") == {"ref": "bite/self-check-70"}
 
 
+OLD = "old\n<!-- bite-self-check: 1a2b3c4d -->\n"
+
+
 def test_a_gap_already_reported_is_not_reported_again(tmp_path):
-    r, calls = run(tmp_path, GH_ISSUES=json.dumps(["old\n<!-- bite-self-check: 1a2b3c4d -->\n"]))
+    r, calls = run(tmp_path, GH_ISSUES=json.dumps([{"number": 60, "state": "closed", "body": OLD}]))
     assert r.returncode == 0 and "Nothing new" in r.stdout
+    assert not [c for c in calls if c[0] == "POST"]
+
+
+def test_without_a_key_an_open_issue_gets_nothing_new(tmp_path):
+    r, calls = run(tmp_path, test=False, GH_ISSUES=json.dumps([{"number": 60, "state": "open", "body": OLD}]))
+    assert r.returncode == 0 and "Nothing new" in r.stdout
+    assert not [c for c in calls if c[0] == "POST"]
+
+
+def test_an_open_issue_gets_its_pull_request_once_the_test_is_written(tmp_path):
+    # The first run had no key (issue only); the key came later, so this run wrote the test.
+    issues = json.dumps([{"number": 60, "state": "open", "body": OLD}, {"number": 61, "pull_request": {}, "body": OLD}])
+    r, calls = run(tmp_path, GH_ISSUES=issues)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "repos/o/bite/issues" not in [p for m, p, b in calls if m == "POST"]
+    assert "Closes #60" in posted(calls, "/git/commits")["message"]
+    pr = posted(calls, "/pulls")
+    assert pr["head"] == "bite/self-check-60" and pr["body"].startswith("Closes #60.")
+
+
+def test_an_open_issue_that_already_has_its_pull_request_gets_no_second_one(tmp_path):
+    r, calls = run(tmp_path, GH_ISSUES=json.dumps([{"number": 60, "state": "open", "body": OLD}]),
+                   GH_PULLS='[{"number": 62}]')
+    assert r.returncode == 0 and "already opened a pull request for #60" in r.stdout
     assert not [c for c in calls if c[0] == "POST"]
 
 
