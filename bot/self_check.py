@@ -82,10 +82,14 @@ def main() -> int:
     shut = ", ".join(f"closes #{n}" for n in closes)
     shut = shut[0].upper() + shut[1:]
     it = "it" if len(files) == 1 else "them"
+    # Bite names its tests the same way each time (tests/test_bite_claim.py): one already in the repo, from an
+    # earlier self-check, gets this issue's number in the new one's name instead of being replaced.
+    where = {f: f if not Path(f).exists() else re.sub(r"(\.[^./]+)?$", lambda m: f"_{issue}{m.group(1) or ''}", f, count=1)
+             for f in files}
     try:
         tree = api("GET", f"repos/{repo}/git/commits/{main_sha}")["tree"]["sha"]
         tree = api("POST", f"repos/{repo}/git/trees", {"base_tree": tree, "tree": [
-            {"path": f, "mode": "100644", "type": "blob", "content": (TESTS / f).read_text(encoding="utf-8")}
+            {"path": where[f], "mode": "100644", "type": "blob", "content": (TESTS / f).read_text(encoding="utf-8")}
             for f in files]})["sha"]
         commit = api("POST", f"repos/{repo}/git/commits", {
             "message": f"Add the missing test{'' if len(files) == 1 else 's'} Bite wrote for itself\n\n"
@@ -99,7 +103,7 @@ def main() -> int:
             "body": f"{shut}.\n\nBite wrote {'this test' if len(files) == 1 else 'these tests'} for a "
                     f"change in Bite that no test noticed, and ran {it} itself: {'it passes' if len(files) == 1 else 'each passes'} "
                     "with the change and fails with the change taken out.\n\n"
-                    + "\n".join(f"- `{f}`" for f in files)})["number"]
+                    + "\n".join(f"- `{where[f]}`" for f in files)})["number"]
     except (RuntimeError, KeyError, TypeError) as e:
         print(f"::warning::Bite couldn't open the pull request with {it} for #{issue} (the workflow needs "
               "contents and pull-requests write, and Settings, Actions, General: \"Allow GitHub Actions to create and "
