@@ -185,8 +185,8 @@ Prefer a gentler wording for the warnings? `bite --roast` gives the same results
 
 | Project | Language | Changes checked | Noticed by a test | Real gaps |
 |---|---|---|---|---|
-| [Rich](https://github.com/Textualize/rich) | Python | 40 | 15 | 1 small: [`<kbd>` keys in Markdown](https://github.com/Textualize/rich/commit/a9c4aaba) |
-| [Click](https://github.com/pallets/click) | Python | 40 | 30 | 1 small: [`help` on custom setting types](https://github.com/pallets/click/commit/405a5481) |
+| [Rich](https://github.com/Textualize/rich) | Python | 37 | 15 | 1 small: [`<kbd>` keys in Markdown](https://github.com/Textualize/rich/commit/a9c4aaba) |
+| [Click](https://github.com/pallets/click) | Python | 37 | 30 | 1 small: [`help` on custom setting types](https://github.com/pallets/click/commit/405a5481) |
 | [qs](https://github.com/ljharb/qs) | JavaScript | 40 | 40 | none ✅ |
 | [chi](https://github.com/go-chi/chi) | Go | 27 | 21 | 2 small: [a test that only works in a terminal](https://github.com/go-chi/chi/commit/878fe71f), [XML compression](https://github.com/go-chi/chi/commit/d7b767bc) |
 | [serde_json](https://github.com/serde-rs/json) | Rust | 16 | 12 | none ✅ |
@@ -195,6 +195,8 @@ Prefer a gentler wording for the warnings? `bite --roast` gives the same results
 Checked Oct 30-31, 2026 with `bite --free`. Every bug fix Bite could check had a test (one of chi's only works in a terminal). We read each unnoticed change
 by hand. Apart from the gaps above, they were things a test can't catch, like type hints, speed-ups, Windows-only
 code or rewrites that work the same.
+
+**[The full scoreboard](SCOREBOARD.md)** has 20 projects in 5 languages, with a link to every gap.
 
 ## The catch that shows what it's for
 
