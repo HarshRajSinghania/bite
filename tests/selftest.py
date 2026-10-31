@@ -628,6 +628,13 @@ check("comment: no tests ran is a warning, not a calm dash", f"### {recent.CAT} 
 notes["tests fail"] = newest_fails
 check("comment: a commit set aside on purpose says skipped, not couldn't check",
       "Skipped: a tidy-up" in recent.write_comment(root, [dict(c1, undo="not flagged: a tidy-up (no behaviour change meant)")]).read_text(encoding="utf-8"))
+# A long commit title is shown whole in the comment, and cut at a word with "…" in the terminal (#71 showed "…the t").
+long_title = "Bite checks Bite: an issue for each gap, and a pull request with the test that closes it"
+check("comment: a long commit title is shown whole, not cut mid-word",
+      f"“{long_title}”" in recent.write_comment(root, [dict(c1, subject=long_title, undo="guarded")]).read_text(encoding="utf-8"))
+check(f"terminal: a long commit title is cut at a word, with … (got {recent.short(long_title)!r})",
+      recent.short(long_title) == "Bite checks Bite: an issue for each gap, and a pull request with the…"
+      and len(recent.short(long_title)) <= 70 and recent.short("short one") == "short one")
 with patch.dict(os.environ, {"BITE_PR_COMMITS": "34", "BITE_CHECKED_COMMITS": "20"}):
     big = recent.write_comment(root, [dict(c1, undo="guarded")]).read_text(encoding="utf-8")
 check("comment: a pull request with more commits than were checked says so", "newest 20 of this pull request's 34 commits" in big)
