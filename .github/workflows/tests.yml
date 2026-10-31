@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  # bot/self_check.py starts it on the pull request it opens (GitHub doesn't start checks on those by itself).
+  workflow_dispatch:
 
 jobs:
   test:
